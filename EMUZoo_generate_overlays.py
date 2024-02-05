@@ -28,6 +28,7 @@ from reproject.mosaicking import find_optimal_celestial_wcs
 from reproject import reproject_interp
 from reproject.mosaicking import reproject_and_coadd
 from matplotlib.patches import Ellipse
+import settings
 
 #-----------------------------------------------------------
 def ashinh_scale(array,zeropoint=0,scale=1):
@@ -41,26 +42,26 @@ def percentile(array,percent):
 
 # Hard coded variables (data locations etc)
 
-dataloc='/mnt/shared/des/askap_data/' #askap data location
-WISEfiles=glob.glob('/mnt/shared/des/WISEtiles/*.fits') #WISE raw data tiles location
+dataloc=settings.dataloc #askap data location
+WISEfiles=glob.glob(settings.WISEfiles_dir) #WISE raw data tiles location
 
-SB='9351'
+SB= settings.SB#'9351'
 
 #hard coded image names due to inconsistent naming conventions but could be streamlined
 image='image.i.SB'+SB+'.cont.taylor.0.restored.fits'
 
 #note that there are two catalogue types: island and component
 #cat=dataloc+'catalogues/AS101_Continuum_Island_Catalogue_'+SB+'.csv'
-cat=dataloc+'catalogues/AS101_Continuum_Component_Catalogue_9351_78.csv'
+cat=dataloc+settings.cat_sub.format(SB)
 island=False #change to true if using island catalogue
 
 # folder for cutout data output if you want to save radio fits files
 # not currently implemented due to data storage issues
-radiooutloc='/mnt/shared/des/radio_cutouts/SB'+SB
+radiooutloc=settings.radio_output+SB
 if os.path.isdir(radiooutloc) ==False:
     os.system('mkdir '+radiooutloc+SB)
 
-overlayloc='/mnt/shared/des/radio_cutouts/SB'+SB
+overlayloc=settings.overlayloc+SB
 if os.path.isdir(overlayloc) ==False:
     os.system('mkdir '+overlayloc+SB)
 overlay_suffix='.png'
@@ -119,7 +120,7 @@ bmin_pix=header['BMIN']/header['CDELT2']
 bpa=header['BPA']
 
 # read in catalogue
-catalogue=np.genfromtxt(cat,dtype='str',delimiter=',')
+catalogue=np.genfromtxt(cat.format(SB),dtype='str',delimiter=',')
 headers=catalogue[0,:]
 data=catalogue[1:,:]
 #below lines for if you'd like to check catalogue headers
@@ -133,17 +134,20 @@ data_sorted = data[data[:,19].argsort()[::-1]] #componenet cat, major axis
 
 #-----------------------------------------------------------
 
-#get the coordintes of the WISE images to know which to load and use
-WISEcoords=[]
-for file in WISEfiles:
-    filename=file.split('/')[-1] #get the actual file name
-    ra=float(filename[0:4])/10
-    dec=-1*float(filename[5:8])/10
-    WISEcoords.append(SkyCoord(ra,dec,unit=u.degree,frame='fk5'))
-WISEcoords=SkyCoord(np.asarray(WISEcoords))
+"DEPRECATED"
+# =============================================================================
+# #get the coordintes of the WISE images to know which to load and use
+# WISEcoords=[]
+# for file in WISEfiles:
+#     filename=file.split('/')[-1] #get the actual file name
+#     ra=float(filename[0:4])/10
+#     dec=-1*float(filename[5:8])/10
+#     WISEcoords.append(SkyCoord(ra,dec,unit=u.degree,frame='fk5'))
+# WISEcoords=SkyCoord(np.asarray(WISEcoords))
+# =============================================================================
 
-WISEtiles=np.genfromtxt('WISE_tiles.txt',dtype='str') #this file should be in the same location as the code
-DEStiles=np.genfromtxt('/DES_tiles_dims.txt',dtype='str') #this file should be in the same location as the code
+WISEtiles=np.genfromtxt(settings.WISEtiles,dtype='str') #this file should be in the same location as the code
+DEStiles=np.genfromtxt(settings.DEStiles,dtype='str') #this file should be in the same location as the code
 
 #-----------------------------------------------------------
 
@@ -210,7 +214,7 @@ for i in range(0,len(data_sorted)):
         ymax=int(y_cen+npix_edge)
         
         #print(ra_max,ra_min,dec_max,dec_min)
-
+        "Cutouts are created here"
         # find which DES and WISE tiles to use
         indices=np.where( (DEStiles[:,2].astype(float)>=ra_min) & (DEStiles[:,1].astype(float)<=ra_max) & (DEStiles[:,3].astype(float)>=dec_min) & (DEStiles[:,4].astype(float)<=dec_max))
         DES_tiles_to_use=DEStiles[indices,0]
@@ -246,16 +250,16 @@ for i in range(0,len(data_sorted)):
         
         for j in range(0,len(DES_tiles_to_use[0])):
             #for j in ind:
-            Rhdu=fits.open(glob.glob('/mnt/shared/des/DEStiles/'+DES_tiles_to_use[0][j]+'*_i.fits*')[0])
+            Rhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_i.fits*')[0])
             R=Rhdu[1].data
             des_wcs=WCS(Rhdu[1].header)
             Rhdu.close()
 
-            Ghdu=fits.open(glob.glob('/mnt/shared/des/DEStiles/'+DES_tiles_to_use[0][j]+'*_r.fits*')[0])
+            Ghdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_r.fits*')[0])
             G=Ghdu[1].data
             Ghdu.close()
 
-            Bhdu=fits.open(glob.glob('/mnt/shared/des/DEStiles/'+DES_tiles_to_use[0][j]+'*_g.fits*')[0])
+            Bhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_g.fits*')[0])
             B=Bhdu[1].data
             Bhdu.close()
 
@@ -322,7 +326,7 @@ for i in range(0,len(data_sorted)):
             wise_list=[]
             for k in range(0,len(wise_tiles_to_use[0])):
                 #get wise cutout 
-                wise_im='/mnt/shared/des/WISEtiles/'+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
+                wise_im=settings.WISEfiles_dir.split("*")[0]+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
                 wise_hdu=fits.open(wise_im)
                 wise_data= wise_hdu[0].data
                 wise_wcs= WCS(wise_hdu[0].header)
@@ -356,7 +360,7 @@ for i in range(0,len(data_sorted)):
             print("wise failed")
             for k in range(0,len(wise_tiles_to_use[0])):
                 #get wise cutout 
-                wise_im='/mnt/shared/des/WISEtiles/'+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
+                wise_im=settings.WISEfiles_dir.split("*")[0]+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
                 wise_hdu=fits.open(wise_im)
                 wise_data= wise_hdu[0].data
                 wise_wcs= WCS(wise_hdu[0].header)
