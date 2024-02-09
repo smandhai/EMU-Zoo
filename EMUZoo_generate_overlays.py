@@ -43,7 +43,7 @@ def percentile(array,percent):
 # =============================================================================
 # OVERRIDE SETTINGS
 # =============================================================================
-override_src = 'J202254-540537' #"J202505-540405" 'J202254-540537'#None
+override_src = settings.override_src #'J202254-540537' #"J202505-540405" 'J202254-540537'#None
 
 #-----------------------------------------------------------
 
@@ -61,7 +61,7 @@ image='image.i.SB'+SB+'.cont.taylor.0.restored.fits'
 #note that there are two catalogue types: island and component
 #cat=dataloc+'catalogues/AS101_Continuum_Island_Catalogue_'+SB+'.csv'
 cat=dataloc+settings.cat_sub.format(SB)
-island=False #change to true if using island catalogue
+island=settings.island #change to true if using island catalogue
 
 # folder for cutout data output if you want to save radio fits files
 # not currently implemented due to data storage issues
@@ -217,7 +217,7 @@ for i in range(0,len(data_sorted)):
 
     # check to see if file already exists for this source
     # aka you shouldn't be able to overwrite existing files unless you tweak this!
-    if os.path.isfile(filename) == False|os.path.isfile(filename) == True: #Second condition is for debugging
+    if (os.path.isfile(filename) == False)|(os.path.isfile(filename) == True): #Second condition is for debugging
     	#print(i,src)
         coords=SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit=u.degree)   
 
@@ -255,10 +255,9 @@ for i in range(0,len(data_sorted)):
         #OR
         norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.9)
         if island: 
-            basecont=background_noise*float(data_sorted[i,31])/1e6 #0.00012 #Median Value
+            basecont=min(norm_background,float(data_sorted[i,31])/1e3*background_noise,0.00012)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
         else:
-            basecont=min(norm_background
-                         ,float(data_sorted[i,32])/1e6)
+            basecont=min(norm_background,float(data_sorted[i,32])/1e3*background_noise,0.00012)
         radio_contours = [basecont * i for i in contourmults]
         
         radio_max=np.nanmax(radio_cutout.data)
