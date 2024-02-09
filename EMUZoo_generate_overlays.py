@@ -253,10 +253,12 @@ for i in range(0,len(data_sorted)):
         contourmults=np.power(2,contourexps)
         #basecont=3.*background_noise/1000.
         #OR
-        if island:    
+        norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.9)
+        if island: 
             basecont=background_noise*float(data_sorted[i,31])/1e6 #0.00012 #Median Value
         else:
-            basecont=background_noise*float(data_sorted[i,32])/1e6
+            basecont=min(norm_background
+                         ,float(data_sorted[i,32])/1e6)
         radio_contours = [basecont * i for i in contourmults]
         
         radio_max=np.nanmax(radio_cutout.data)
