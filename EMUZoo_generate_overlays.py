@@ -40,6 +40,14 @@ def percentile(array,percent):
     return val
 #-----------------------------------------------------------
 
+# =============================================================================
+# OVERRIDE SETTINGS
+# =============================================================================
+override_src = 'J202254-540537' #"J202505-540405" 'J202254-540537'#None
+
+#-----------------------------------------------------------
+
+
 # Hard coded variables (data locations etc)
 
 dataloc=settings.dataloc #askap data location
@@ -150,9 +158,21 @@ WISEtiles=np.genfromtxt(settings.WISEtiles,dtype='str') #this file should be in 
 DEStiles=np.genfromtxt(settings.DEStiles,dtype='str') #this file should be in the same location as the code
 
 #-----------------------------------------------------------
-
+#%%
 #MAIN BIT
 
+#Override Source
+if override_src != None:
+    if island:
+        find_src = np.where(np.asarray(data_sorted[:,6]).astype(str)==override_src)
+    else:
+        find_src = np.where(np.asarray(data_sorted[:,7]).astype(str)==override_src)
+    if len(find_src[0])>0:
+        data_sorted = data_sorted[find_src]
+    else:
+        raise ValueError("Override value not found")
+
+#%%
 #loop over sources in the list
 
 for i in range(0,len(data_sorted)):
@@ -197,7 +217,7 @@ for i in range(0,len(data_sorted)):
 
     # check to see if file already exists for this source
     # aka you shouldn't be able to overwrite existing files unless you tweak this!
-    if os.path.isfile(filename) == False:
+    if os.path.isfile(filename) == False|os.path.isfile(filename) == True: #Second condition is for debugging
     	#print(i,src)
         coords=SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit=u.degree)   
 
@@ -233,7 +253,10 @@ for i in range(0,len(data_sorted)):
         contourmults=np.power(2,contourexps)
         #basecont=3.*background_noise/1000.
         #OR
-        basecont=0.00012
+        if island:    
+            basecont=background_noise*float(data_sorted[i,31])/1e6 #0.00012 #Median Value
+        else:
+            basecont=background_noise*float(data_sorted[i,32])/1e6
         radio_contours = [basecont * i for i in contourmults]
         
         radio_max=np.nanmax(radio_cutout.data)
@@ -250,7 +273,11 @@ for i in range(0,len(data_sorted)):
         
         for j in range(0,len(DES_tiles_to_use[0])):
             #for j in ind:
-            Rhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_i.fits*')[0])
+            try:
+                Rhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_i.fits*')[0])
+            except IndexError:
+                raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+                break
             R=Rhdu[1].data
             des_wcs=WCS(Rhdu[1].header)
             Rhdu.close()
