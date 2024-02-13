@@ -1,5 +1,6 @@
 # EMUZoo cutout generation code
 # Author: Emma Alexander (emma.alexander@gmail.com)
+# Modified by: Soheb Mandhai (soheb.mandhai@manchester.ac.uk)
 # https://github.com/EmmaAlexander/EMU-Zoo
 
 # NOTE: currently limited to EMU Pilot I survey fields area. Will needs tweaks for main survey data. 
@@ -163,11 +164,15 @@ DEStiles=np.genfromtxt(settings.DEStiles,dtype='str') #this file should be in th
 
 #Override Source
 if override_src != None:
+    if type(override_src) == str: #Convert single source name to a list
+        override_src = [override_src]
     if island:
-        find_src = np.where(np.asarray(data_sorted[:,6]).astype(str)==override_src)
+        _,find_src,_=np.intersect1d(data_sorted[:,6],override_src,return_indices=True)
+        #find_src = np.where(np.asarray(data_sorted[:,6]).astype(str)==override_src)
     else:
-        find_src = np.where(np.asarray(data_sorted[:,7]).astype(str)==override_src)
-    if len(find_src[0])>0:
+        _,find_src,_=np.intersect1d(data_sorted[:,7],override_src,return_indices=True)
+        #find_src = np.where(np.asarray(data_sorted[:,7]).astype(str)==override_src)
+    if len(find_src)>0:
         data_sorted = data_sorted[find_src]
     else:
         raise ValueError("Override value not found")
@@ -200,6 +205,8 @@ for i in range(0,len(data_sorted)):
         solid_angle = float(data_sorted[i,31])
         x_cen = float(data_sorted[i,35])
         y_cen = float(data_sorted[i,36])
+        rms_median = data_sorted[i,24]
+
     else:
     	#component catalogue being used
     
@@ -208,7 +215,8 @@ for i in range(0,len(data_sorted)):
         dec_dms_cont=data_sorted[i,9]
         ra_deg_cont	=data_sorted[i,10]
         dec_deg_cont=data_sorted[i,11]      
-        background_noise =float(data_sorted[i,37])    
+        background_noise =float(data_sorted[i,37]) 
+        rms_median = data_sorted[i,32]
 
         #re-iterating todo: change to header names rather than index (likely to break)	
 
@@ -254,17 +262,35 @@ for i in range(0,len(data_sorted)):
         #basecont=3.*background_noise/1000.
         #OR
         norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.9)
-        if island: 
-            basecont=min(norm_background,float(data_sorted[i,31])/1e3*background_noise,0.00012)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
-        else:
-            basecont=min(norm_background,float(data_sorted[i,32])/1e3*background_noise,0.00012)
+        # basecont=max(min(norm_background,float(rms_median)/1e3*background_noise,0.00012),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
+        basecont=max(min(norm_background,0.00012),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
+        #basecont = 0.00012
+        # else:
+            # basecont=max(min(norm_background,float(data_sorted[i,32])/1e3*background_noise,0.00012),background_noise/1000)
         radio_contours = [basecont * i for i in contourmults]
-        
+       
         radio_max=np.nanmax(radio_cutout.data)
         nconts=np.nanmax(np.flatnonzero(radio_contours < radio_max))
+        #Only choose a selected number of contours
+        "Restrict number of shown contours"
+        "Trim the radio contours"
+        radio_contours = np.asarray(radio_contours)[radio_contours <= radio_max]
+        # if len(radio_contours) > settings.cont_limit:
+        #     radio_hist,radio_bins = np.histogram(radio_contours,bins=settings.cont_limit) 
+        #     radio_contours = radio_bins+ (radio_bins[1]-radio_bins[0])/2        
+        radio_contours = np.linspace(radio_contours.min(),radio_contours.max(),settings.cont_limit)
+        #radio_contours = np.quantile(radio_cutout.data,[0.97,0.98,0.99])
+        radio_contours= np.logspace(np.log2(radio_contours.min()),np.log2(radio_contours.max()),settings.cont_limit,base=2)
+        radio_cutout_contours=  radio_cutout.data
+        # =============================================================================
+        #         MASKING TEST
+        # =============================================================================
+        radio_cutout_contours[radio_cutout_contours<radio_contours[1]]= 0
+        radio_cutout.data  = radio_cutout_contours
         
         contcolors=[]
         for c in range(0,nconts+1):
+            "Gradually shift the colourmap incrementally based on contour level"
             contcolors.append(greycmap(0.5+(0.5*c/(nconts+1))))  
 
 
