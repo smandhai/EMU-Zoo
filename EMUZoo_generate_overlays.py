@@ -177,6 +177,8 @@ if override_src != None:
     else:
         raise ValueError("Override value not found")
 
+exclusion_list = [] #List of sources to be excluded
+
 #%%
 #loop over sources in the list
 
@@ -261,9 +263,10 @@ for i in range(0,len(data_sorted)):
         contourmults=np.power(2,contourexps)
         #basecont=3.*background_noise/1000.
         #OR
-        norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.9)
+        norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.97)
         # basecont=max(min(norm_background,float(rms_median)/1e3*background_noise,0.00012),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
-        basecont=max(min(norm_background,0.00012),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
+        basecont=max(min(norm_background,0.00012,float(rms_median)/100),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
+        basecont = max(norm_background,background_noise/1000)
         #basecont = 0.00012
         # else:
             # basecont=max(min(norm_background,float(data_sorted[i,32])/1e3*background_noise,0.00012),background_noise/1000)
@@ -279,14 +282,27 @@ for i in range(0,len(data_sorted)):
         #     radio_hist,radio_bins = np.histogram(radio_contours,bins=settings.cont_limit) 
         #     radio_contours = radio_bins+ (radio_bins[1]-radio_bins[0])/2        
         radio_contours = np.linspace(radio_contours.min(),radio_contours.max(),settings.cont_limit)
+        
         #radio_contours = np.quantile(radio_cutout.data,[0.97,0.98,0.99])
-        radio_contours= np.logspace(np.log2(radio_contours.min()),np.log2(radio_contours.max()),settings.cont_limit,base=2)
-        radio_cutout_contours=  radio_cutout.data
+        "Log 2 increments - works well but solo contours still exist"
+        radio_contours= np.logspace(np.log2(radio_contours.min()*0.6),np.log2(radio_contours.max()),settings.cont_limit,base=2)+background_noise/1000
+        nconts =settings.cont_limit
+        print(radio_contours, filename)
         # =============================================================================
-        #         MASKING TEST
+        #         MASKING TEST - Comment on during actual runs
         # =============================================================================
+        radio_cutout_contours=  np.array(radio_cutout.data)
         radio_cutout_contours[radio_cutout_contours<radio_contours[1]]= 0
-        radio_cutout.data  = radio_cutout_contours
+        x_size,y_size= radio_cutout_contours.shape
+        pixels_per_arcmin = x_size/arcmins
+        selection_window_x = (int(x_size/2 - pixels_per_arcmin),int(x_size/2 + pixels_per_arcmin))
+        selection_window_y = (int(y_size/2 - pixels_per_arcmin),int(y_size/2 + pixels_per_arcmin))
+        radio_cutout_window = radio_cutout_contours[selection_window_x[0]:selection_window_x[1],
+                              selection_window_y[0]:selection_window_y[1]]
+        "Check if there is a source within the masked region"
+        if len(np.where(radio_cutout_window>0)[1]) ==0:
+            exclusion_list.append(src)
+        # radio_cutout.data  = radio_cutout_contours
         
         contcolors=[]
         for c in range(0,nconts+1):
