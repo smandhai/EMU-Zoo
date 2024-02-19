@@ -30,7 +30,10 @@ from reproject import reproject_interp
 from reproject.mosaicking import reproject_and_coadd
 from matplotlib.patches import Ellipse
 import settings
-
+import pandas as pd
+import functools as ft
+import utils as ut
+#%%
 #-----------------------------------------------------------
 def ashinh_scale(array,zeropoint=0,scale=1):
     scaled=(array-zeropoint)*np.arcsinh(array*scale)/(array*np.arcsinh(scale))
@@ -160,12 +163,23 @@ DEStiles=np.genfromtxt(settings.DEStiles,dtype='str') #this file should be in th
 
 #-----------------------------------------------------------
 #%%
+
+# =============================================================================
+# Prepare output directories
+# =============================================================================
+ut.make_dir(settings.radio_output) #Create output directory
+ut.make_dir(settings.exclusion_dir) # Create exclusion directory
+
 #MAIN BIT
 
 #Override Source
 if override_src != None:
-    if type(override_src) == str: #Convert single source name to a list
-        override_src = [override_src]
+    if settings.use_file:
+        source_list = pd.read_csv(override_src)
+        override_src = list(source_list[source_list.columns[0]])
+    else:
+        if type(override_src) == str: #Convert single source name to a list
+            override_src = [override_src]
     if island:
         _,find_src,_=np.intersect1d(data_sorted[:,6],override_src,return_indices=True)
         #find_src = np.where(np.asarray(data_sorted[:,6]).astype(str)==override_src)
@@ -175,7 +189,7 @@ if override_src != None:
     if len(find_src)>0:
         data_sorted = data_sorted[find_src]
     else:
-        raise ValueError("Override value not found")
+        raise ValueError("Override value(s) not found")
 
 exclusion_list = [] #List of sources to be excluded
 
@@ -538,5 +552,59 @@ for i in range(0,len(data_sorted)):
 
         plt.savefig(filename_cross)
         plt.show()
+        
+#%%
+    # =============================================================================
+    # Create standlone cutouts
+    # =============================================================================
+    if settings.create_cutout:
+        #Create file
+        ut.make_dir(settings.cutout_dir) #Checks if directory already exists
+        fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi,1024/my_dpi))
+        ax = plt.subplot(111,projection=radio_cutout.wcs,fc='grey')
+        ax.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+        ax.contour(radio_cutout.data,levels=radio_contours,colors='grey')
+        ax.axis('off')
+        ax.set_axis_off()
+        ax.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
+        ax.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
+        cutout_suffix = ""
+        if settings.use_cross:
+            cutout_suffix = "_cross"
+            ax.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+        plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+        plt.savefig(settings.cutout_dir+"SB"+settings.SB+src+cutout_suffix+".png",pad_inches=0)
 
+#%%
+print("Running clean-up and exclusion routine...\n")
+# =============================================================================
+# Creating exclusion list
+# =============================================================================
+if len(exclusion_list)>0: #If there are sources in the exclusion list
+    table = pd.DataFrame(exclusion_list,columns=["Source_ID"]) #Create a new table
+    table["Field"] = np.tile(settings.SB,len(exclusion_list)) #Assign field ID
+    if os.path.isfile(settings.exclusion_list): #If file exists
+        temp_table = pd.read_csv(settings.exclusion_list) #Load in existing file
+        table= temp_table.concatenate(table) #Append current table to existing source list
+    table.to_csv(settings.exclusion_list,index=False) #Save file
 
+# =============================================================================
+# Move excluded sources to their own designated folder
+# =============================================================================
+    source_filenames= glob.glob(settings.radio_output+"*") #List of cutout files
+    
+    "Create a list of source files that have been created"
+    source_list = list(map(ft.partial(ut.extract_sources,field_split=settings.SB),source_filenames)) #Extract source names from files
+    
+    "Find indices corresponding to the matched file location"
+    _,match_index,_=np.intersect1d(source_list,table["Source_ID"],return_indices=True)
+    excluded_source_list = source_list[match_index] #List of excluded source filenames
+    excluded_source_filenames= source_filenames[match_index] #Source filenames
+    
+    "Move files"
+    
+    map(ft.partial(ut.extract_sources,new_dir=settings.exclusion_dir),excluded_source_filenames) #Extract source names from files
+print("Operation completed...\n")
