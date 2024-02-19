@@ -19,7 +19,7 @@ override_src = ["J202715-553043","J202505-540405","J210240-552627","J202710-5306
 # Field Settings
 # =============================================================================
 SB='9351'
-island=False#True
+island=True#True
 # =============================================================================
 # Directories
 # =============================================================================
@@ -57,3 +57,8 @@ cont_limit = 8
 create_cutout = True #Create cutout of default view?
 cutout_dir = prefix+'des/radio_cutouts_6x6/'
 use_cross = False
+
+# =============================================================================
+# ADVANCED OPTIONS - DO NOT CHANGE UNLESS YOU KNOW WHAT YOU'RE DOING
+# =============================================================================
+field_ref = 'SB' #Reference to field

@@ -167,7 +167,7 @@ DEStiles=np.genfromtxt(settings.DEStiles,dtype='str') #this file should be in th
 # =============================================================================
 # Prepare output directories
 # =============================================================================
-ut.make_dir(settings.radio_output) #Create output directory
+ut.make_dir(settings.radio_output.split(settings.field_ref)[0]) #Create output directory
 ut.make_dir(settings.exclusion_dir) # Create exclusion directory
 
 #MAIN BIT
