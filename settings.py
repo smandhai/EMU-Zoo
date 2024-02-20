@@ -7,13 +7,6 @@ Initialise directories for testing among other variable components.
 @author: Soheb Mandhai
 """
 
-# =============================================================================
-# Source Settings
-# =============================================================================
-use_file= False# If True, set override_src to the file name of the source list
-override_src = ["J202715-553043","J202505-540405","J210240-552627","J202710-530638","J202254-540537"]#"J202505-540405"#'J202254-540537' #Default =None
-
-#Note: If you are using a file, ensure the source names are in the first column
 
 # =============================================================================
 # Field Settings
@@ -47,6 +40,16 @@ exclusion_list = prefix+"excluded_sources.csv"
 exclusion_dir = prefix+"des/excluded_radio_cutouts/"
 
 # =============================================================================
+# Source Settings
+# =============================================================================
+use_file= False# If True, set override_src to the file name of the source list
+override_src = ["J202715-553043","J202505-540405","J210240-552627","J202710-530638","J202254-540537"]#"J202505-540405"#'J202254-540537' #Default =None
+#override_src = prefix+'des/beta_test_subject_ids.txt'
+
+#Note: If you are using a file, ensure the source names are in the first column
+
+
+# =============================================================================
 # Contour Settings
 # =============================================================================
 cont_limit = 8
@@ -55,6 +58,7 @@ cont_limit = 8
 # Additional Options
 # =============================================================================
 create_cutout = True #Create cutout of default view?
+export_fits_cutout=True #Create fits cutout?
 cutout_dir = prefix+'des/radio_cutouts_6x6/'
 use_cross = False
 
