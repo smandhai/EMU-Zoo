@@ -124,7 +124,7 @@ hdu=fits.open(dataloc+image)
 image=hdu[0].data.squeeze()
 header=hdu[0].header
 wcs= WCS(hdu[0].header).celestial
-hdu.close()
+#hdu.close()
 #some useful parameters that don't get used here
 pixscale=header['CDELT2']
 bmaj_pix=header['BMAJ']/header['CDELT2']
@@ -175,7 +175,7 @@ ut.make_dir(settings.exclusion_dir) # Create exclusion directory
 #Override Source
 if override_src != None:
     if settings.use_file:
-        source_list = pd.read_csv(override_src)
+        source_list = pd.read_csv(override_src,header=None)
         override_src = list(source_list[source_list.columns[0]])
     else:
         if type(override_src) == str: #Convert single source name to a list
@@ -551,15 +551,22 @@ for i in range(0,len(data_sorted)):
         ax9.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
 
         plt.savefig(filename_cross)
-        plt.show()
-        
+        plt.show()     
 #%%
     # =============================================================================
     # Create standlone cutouts
     # =============================================================================
     if settings.create_cutout:
         #Create file
+        cutout_suffix = ""
+        cutout_filename =settings.cutout_dir+"SB"+settings.SB+src+cutout_suffix
         ut.make_dir(settings.cutout_dir) #Checks if directory already exists
+        if settings.export_fits_cutout:
+            radio_cutout_small = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge), wcs=wcs, mode='trim')
+            hdu[0].data = radio_cutout_small.data
+            hdu[0].header.update(radio_cutout_small.wcs.to_header())
+            hdu.writeto(cutout_filename+".fits", overwrite=True)
+        "Create cutout figure"
         fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi,1024/my_dpi))
         ax = plt.subplot(111,projection=radio_cutout.wcs,fc='grey')
         ax.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
@@ -568,7 +575,6 @@ for i in range(0,len(data_sorted)):
         ax.set_axis_off()
         ax.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
         ax.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
-        cutout_suffix = ""
         if settings.use_cross:
             cutout_suffix = "_cross"
             ax.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
@@ -576,8 +582,9 @@ for i in range(0,len(data_sorted)):
             ax.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
             ax.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
         plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
-        plt.savefig(settings.cutout_dir+"SB"+settings.SB+src+cutout_suffix+".png",pad_inches=0)
+        plt.savefig(cutout_filename+".png",pad_inches=0)
 
+hdu.close()   #Close radio fits file
 #%%
 print("Running clean-up and exclusion routine...\n")
 # =============================================================================
@@ -589,6 +596,7 @@ if len(exclusion_list)>0: #If there are sources in the exclusion list
     if os.path.isfile(settings.exclusion_list): #If file exists
         temp_table = pd.read_csv(settings.exclusion_list) #Load in existing file
         table= temp_table.concatenate(table) #Append current table to existing source list
+    table.drop_duplicates()
     table.to_csv(settings.exclusion_list,index=False) #Save file
 
 # =============================================================================
