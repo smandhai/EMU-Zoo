@@ -42,9 +42,9 @@ exclusion_dir = prefix+"des/excluded_radio_cutouts/"
 # =============================================================================
 # Source Settings
 # =============================================================================
-use_file= False# If True, set override_src to the file name of the source list
+use_file= True# If True, set override_src to the file name of the source list
 override_src = ["J202715-553043","J202505-540405","J210240-552627","J202710-530638","J202254-540537"]#"J202505-540405"#'J202254-540537' #Default =None
-#override_src = prefix+'des/beta_test_subject_ids.txt'
+override_src = prefix+'des/beta_test_subject_ids.txt'
 
 #Note: If you are using a file, ensure the source names are in the first column
 
@@ -59,7 +59,7 @@ cont_limit = 8
 # =============================================================================
 create_cutout = True #Create cutout of default view?
 export_fits_cutout=True #Create fits cutout?
-cutout_dir = prefix+'des/radio_cutouts_6x6/'
+cutout_dir = prefix+'radio_cutouts_6x6/'
 use_cross = False
 
 # =============================================================================
