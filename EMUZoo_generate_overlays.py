@@ -30,9 +30,11 @@ from reproject import reproject_interp
 from reproject.mosaicking import reproject_and_coadd
 from matplotlib.patches import Ellipse
 import settings
-import pandas as pd
+#import pandas as pd
 import functools as ft
 import utils as ut
+from importlib import reload
+reload(settings)
 #%%
 #-----------------------------------------------------------
 def ashinh_scale(array,zeropoint=0,scale=1):
@@ -175,8 +177,9 @@ ut.make_dir(settings.exclusion_dir) # Create exclusion directory
 #Override Source
 if override_src != None:
     if settings.use_file:
-        source_list = pd.read_csv(override_src,header=None)
-        override_src = list(source_list[source_list.columns[0]])
+        #source_list = pd.read_csv(override_src,header=None)
+        source_list = np.genfromtxt(override_src,dtype=str)
+        override_src = list(source_list)
     else:
         if type(override_src) == str: #Convert single source name to a list
             override_src = [override_src]
@@ -241,7 +244,7 @@ for i in range(0,len(data_sorted)):
 
     # check to see if file already exists for this source
     # aka you shouldn't be able to overwrite existing files unless you tweak this!
-    if (os.path.isfile(filename) == False)|(os.path.isfile(filename) == True): #Second condition is for debugging
+    if (os.path.isfile(filename) == False):#|(os.path.isfile(filename) == True): #Second condition is for debugging
     	#print(i,src)
         coords=SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit=u.degree)   
 
@@ -301,7 +304,7 @@ for i in range(0,len(data_sorted)):
         "Log 2 increments - works well but solo contours still exist"
         radio_contours= np.logspace(np.log2(radio_contours.min()*0.6),np.log2(radio_contours.max()),settings.cont_limit,base=2)+background_noise/1000
         nconts =settings.cont_limit
-        print(radio_contours, filename)
+        #print(radio_contours, filename)
         # =============================================================================
         #         MASKING TEST - Comment on during actual runs
         # =============================================================================
@@ -586,33 +589,41 @@ for i in range(0,len(data_sorted)):
 
 hdu.close()   #Close radio fits file
 #%%
-print("Running clean-up and exclusion routine...\n")
-# =============================================================================
-# Creating exclusion list
-# =============================================================================
-if len(exclusion_list)>0: #If there are sources in the exclusion list
-    table = pd.DataFrame(exclusion_list,columns=["Source_ID"]) #Create a new table
-    table["Field"] = np.tile(settings.SB,len(exclusion_list)) #Assign field ID
-    if os.path.isfile(settings.exclusion_list): #If file exists
-        temp_table = pd.read_csv(settings.exclusion_list) #Load in existing file
-        table= temp_table.concatenate(table) #Append current table to existing source list
-    table.drop_duplicates()
-    table.to_csv(settings.exclusion_list,index=False) #Save file
+"Use numpy to save sources in the exclusion list"
+if len(exclusion_list)>0:
+    np.savetxt(settings.exclusion_list,exclusion_list)
+#%%
 
 # =============================================================================
-# Move excluded sources to their own designated folder
+# THE FOLLOWING IS INOPERABLE WITHOUT A PANDAS INSTALLATION
 # =============================================================================
-    source_filenames= glob.glob(settings.radio_output+"*") #List of cutout files
+# print("Running clean-up and exclusion routine...\n")
+# # =============================================================================
+# # Creating exclusion list
+# # =============================================================================
+# if len(exclusion_list)>0: #If there are sources in the exclusion list
+#     table = pd.DataFrame(exclusion_list,columns=["Source_ID"]) #Create a new table
+#     table["Field"] = np.tile(settings.SB,len(exclusion_list)) #Assign field ID
+#     if os.path.isfile(settings.exclusion_list): #If file exists
+#         temp_table = pd.read_csv(settings.exclusion_list) #Load in existing file
+#         table= temp_table.concatenate(table) #Append current table to existing source list
+#     table.drop_duplicates()
+#     table.to_csv(settings.exclusion_list,index=False) #Save file
+
+# # =============================================================================
+# # Move excluded sources to their own designated folder
+# # =============================================================================
+#     source_filenames= glob.glob(settings.radio_output+"*") #List of cutout files
     
-    "Create a list of source files that have been created"
-    source_list = list(map(ft.partial(ut.extract_sources,field_split=settings.SB),source_filenames)) #Extract source names from files
+#     "Create a list of source files that have been created"
+#     source_list = list(map(ft.partial(ut.extract_sources,field_split=settings.SB),source_filenames)) #Extract source names from files
     
-    "Find indices corresponding to the matched file location"
-    _,match_index,_=np.intersect1d(source_list,table["Source_ID"],return_indices=True)
-    excluded_source_list = source_list[match_index] #List of excluded source filenames
-    excluded_source_filenames= source_filenames[match_index] #Source filenames
+#     "Find indices corresponding to the matched file location"
+#     _,match_index,_=np.intersect1d(source_list,table["Source_ID"],return_indices=True)
+#     excluded_source_list = source_list[match_index] #List of excluded source filenames
+#     excluded_source_filenames= source_filenames[match_index] #Source filenames
     
-    "Move files"
+#     "Move files"
     
-    map(ft.partial(ut.extract_sources,new_dir=settings.exclusion_dir),excluded_source_filenames) #Extract source names from files
-print("Operation completed...\n")
+#     map(ft.partial(ut.extract_sources,new_dir=settings.exclusion_dir),excluded_source_filenames) #Extract source names from files
+# print("Operation completed...\n")
