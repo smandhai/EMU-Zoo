@@ -93,6 +93,8 @@ deg_edge=arcmins*0.025/3.
 # note that many of these are no longer used but kept for posterity
 
 dpi=300
+my_dpi = 100
+sub_font_size = 10
 plt.rc('font', size=0.5)  
 plt.rcParams.update({'lines.linewidth':0.8})
 plt.rc('font', size=10)          # controls default text sizes
@@ -241,9 +243,12 @@ for i in range(0,len(data_sorted)):
 
     filename=overlayloc+src+overlay_suffix
     filename_cross=overlayloc+src+'_cross_'+overlay_suffix
-
+    dir_to_save= settings.radio_output.split(settings.field_ref)[0].split(settings.prefix)[-1].split("/")
+    dir_to_save =list(filter(None,dir_to_save))[0]
+    
     # check to see if file already exists for this source
     # aka you shouldn't be able to overwrite existing files unless you tweak this!
+    excluded_source =False #Check if the source should be excluded
     if (os.path.isfile(filename) == False):#|(os.path.isfile(filename) == True): #Second condition is for debugging
     	#print(i,src)
         coords=SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit=u.degree)   
@@ -280,9 +285,9 @@ for i in range(0,len(data_sorted)):
         contourmults=np.power(2,contourexps)
         #basecont=3.*background_noise/1000.
         #OR
-        norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.97)
+        norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.997)
         # basecont=max(min(norm_background,float(rms_median)/1e3*background_noise,0.00012),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
-        basecont=max(min(norm_background,0.00012,float(rms_median)/100),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
+        #basecont=max(min(norm_background,0.00012,float(rms_median)/100),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
         basecont = max(norm_background,background_noise/1000)
         #basecont = 0.00012
         # else:
@@ -316,9 +321,16 @@ for i in range(0,len(data_sorted)):
         selection_window_y = (int(y_size/2 - pixels_per_arcmin),int(y_size/2 + pixels_per_arcmin))
         radio_cutout_window = radio_cutout_contours[selection_window_x[0]:selection_window_x[1],
                               selection_window_y[0]:selection_window_y[1]]
+        
         "Check if there is a source within the masked region"
         if len(np.where(radio_cutout_window>0)[1]) ==0:
+            "Reset filename to exclude source and place it in another directory"
+            filename=  filename.split(dir_to_save)[0]+settings.exclusion_dir.split(settings.prefix)[-1]+filename.split(dir_to_save)[1]
             exclusion_list.append(src)
+            excluded_source = True
+            if (os.path.isfile(filename) == True):
+                "If the file exists, proceed"
+                continue
         # radio_cutout.data  = radio_cutout_contours
         
         contcolors=[]
@@ -330,268 +342,276 @@ for i in range(0,len(data_sorted)):
         R_list=[]
         G_list=[]
         B_list=[]
-        
-        for j in range(0,len(DES_tiles_to_use[0])):
-            #for j in ind:
-            try:
-                Rhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_i.fits*')[0])
-            except IndexError:
-                raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
-                break
-            R=Rhdu[1].data
-            des_wcs=WCS(Rhdu[1].header)
-            Rhdu.close()
-
-            Ghdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_r.fits*')[0])
-            G=Ghdu[1].data
-            Ghdu.close()
-
-            Bhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_g.fits*')[0])
-            B=Bhdu[1].data
-            Bhdu.close()
-
-            R_cutout=Cutout2D(R,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
-            G_cutout=Cutout2D(G,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
-            B_cutout=Cutout2D(B,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
-
-            R_hdu=fits.PrimaryHDU(data=R_cutout.data, header=R_cutout.wcs.to_header())
-            G_hdu=fits.PrimaryHDU(data=G_cutout.data, header=G_cutout.wcs.to_header())
-            B_hdu=fits.PrimaryHDU(data=B_cutout.data, header=B_cutout.wcs.to_header())
-
-            R_list.append(R_hdu)
-            G_list.append(G_hdu)
-            B_list.append(B_hdu)  
-
-        if len(R_list)==0:
-            print("something wrong")
-        elif len(R_list)==0:
-            #only one image so no need to mosaic
-            R=R_list[0].data
-            G=G_list[0].data
-            B=B_list[0].data
-            des_wcs=WCS(R_list[0].header)
+        if settings.skip_plotting:
+            pass
         else:
-            #need to combine them
-            des_wcs, shape_out = find_optimal_celestial_wcs(R_list)
-            R, footprint_R = reproject_and_coadd(R_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
-            G, footprint_G = reproject_and_coadd(G_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
-            B, footprint_B = reproject_and_coadd(B_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
-            
-        img=lupton_rgb.make_lupton_rgb(R,G,B,Q=10,stretch=50,minimum=1)
-
-        my_dpi = 100
-        sub_font_size = 10
-        fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi, 1024/my_dpi),dpi=my_dpi*0.55)
-        # Set figure background as white
-        fig.patch.set_facecolor('w')        
-
-        ax1=plt.subplot(331,projection=radio_cutout.wcs,fc='grey')            
-        ax2=plt.subplot(332,projection=radio_cutout.wcs,fc='grey') 
-        ax3=plt.subplot(333,projection=radio_cutout.wcs,fc='grey')    
-        ax4=plt.subplot(334,projection=radio_cutout.wcs,fc='grey')    
-        ax5=plt.subplot(335,projection=radio_cutout.wcs,fc='grey')    
-        ax6=plt.subplot(336,projection=radio_cutout.wcs,fc='grey')    
-        ax7=plt.subplot(337,projection=radio_cutout.wcs,fc='grey')    
-        ax8=plt.subplot(338,projection=radio_cutout.wcs,fc='grey')    
-        ax9=plt.subplot(339,projection=radio_cutout.wcs,fc='grey')    
-
-        ax1.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
-        ax1.contour(radio_cutout.data,levels=radio_contours,colors='grey')  
-        ax2.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
-        ax2.contour(radio_cutout.data,levels=radio_contours,colors='grey')
-        ax3.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
-        ax3.contour(radio_cutout.data,levels=radio_contours,colors='grey')
-
-        ax4.imshow(img,transform=ax4.get_transform(des_wcs),origin='lower') 
-        ax5.imshow(img,transform=ax5.get_transform(des_wcs),origin='lower') 
-        ax6.imshow(img,transform=ax6.get_transform(des_wcs),origin='lower')
-        ax4.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
-        ax5.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
-        ax6.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
-        
-        try:
-            wise_list=[]
-            for k in range(0,len(wise_tiles_to_use[0])):
-                #get wise cutout 
-                wise_im=settings.WISEfiles_dir.split("*")[0]+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
-                wise_hdu=fits.open(wise_im)
-                wise_data= wise_hdu[0].data
-                wise_wcs= WCS(wise_hdu[0].header)
-                wise_hdu.close()
-                wise_cutout=Cutout2D(wise_data,position=coords,size=1.05*arcmins*u.arcmin,wcs=wise_wcs,mode='trim')
-                wise_hdu=fits.PrimaryHDU(data=wise_cutout.data, header=wise_cutout.wcs.to_header())               
-                wise_list.append(wise_hdu)
-
-            if len(wise_list)==0:
+            for j in range(0,len(DES_tiles_to_use[0])):
+                #for j in ind:
+                try:
+                    Rhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_i.fits*')[0])
+                except IndexError:
+                    raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+                    break
+                R=Rhdu[1].data
+                des_wcs=WCS(Rhdu[1].header)
+                Rhdu.close()
+    
+                Ghdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_r.fits*')[0])
+                G=Ghdu[1].data
+                Ghdu.close()
+    
+                Bhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_g.fits*')[0])
+                B=Bhdu[1].data
+                Bhdu.close()
+    
+                R_cutout=Cutout2D(R,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
+                G_cutout=Cutout2D(G,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
+                B_cutout=Cutout2D(B,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
+    
+                R_hdu=fits.PrimaryHDU(data=R_cutout.data, header=R_cutout.wcs.to_header())
+                G_hdu=fits.PrimaryHDU(data=G_cutout.data, header=G_cutout.wcs.to_header())
+                B_hdu=fits.PrimaryHDU(data=B_cutout.data, header=B_cutout.wcs.to_header())
+    
+                R_list.append(R_hdu)
+                G_list.append(G_hdu)
+                B_list.append(B_hdu)  
+    
+            if len(R_list)==0:
                 print("something wrong")
-            elif len(wise_list)==1:
-                print("only one wise")
+            elif len(R_list)==0:
                 #only one image so no need to mosaic
-                wise_data=wise_list[0].data
-                wise_wcs=WCS(wise_list[0].header)
-
+                R=R_list[0].data
+                G=G_list[0].data
+                B=B_list[0].data
+                des_wcs=WCS(R_list[0].header)
             else:
-                print("combining wise")
                 #need to combine them
-                wise_wcs, wise_shape_out = find_optimal_celestial_wcs(wise_list)
-                wise_data, footprint_wise = reproject_and_coadd(wise_list,wise_wcs,shape_out=wise_shape_out,reproject_function=reproject_interp)
+                des_wcs, shape_out = find_optimal_celestial_wcs(R_list)
+                R, footprint_R = reproject_and_coadd(R_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
+                G, footprint_G = reproject_and_coadd(G_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
+                B, footprint_B = reproject_and_coadd(B_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
+                
+            img=lupton_rgb.make_lupton_rgb(R,G,B,Q=10,stretch=50,minimum=1)
+    
 
-            #wise_cutout_hdu=fits.PrimaryHDU(data=wise_data, header=wise_wcs.to_header()) 
-            #wise_cutout_hdu.writeto(filename)
+            fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi, 1024/my_dpi),dpi=my_dpi*0.55)
+            # Set figure background as white
+            fig.patch.set_facecolor('w')        
+    
+            ax1=plt.subplot(331,projection=radio_cutout.wcs,fc='grey')            
+            ax2=plt.subplot(332,projection=radio_cutout.wcs,fc='grey') 
+            ax3=plt.subplot(333,projection=radio_cutout.wcs,fc='grey')    
+            ax4=plt.subplot(334,projection=radio_cutout.wcs,fc='grey')    
+            ax5=plt.subplot(335,projection=radio_cutout.wcs,fc='grey')    
+            ax6=plt.subplot(336,projection=radio_cutout.wcs,fc='grey')    
+            ax7=plt.subplot(337,projection=radio_cutout.wcs,fc='grey')    
+            ax8=plt.subplot(338,projection=radio_cutout.wcs,fc='grey')    
+            ax9=plt.subplot(339,projection=radio_cutout.wcs,fc='grey')    
+    
+            ax1.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+            ax1.contour(radio_cutout.data,levels=radio_contours,colors='grey')  
+            ax2.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+            ax2.contour(radio_cutout.data,levels=radio_contours,colors='grey')
+            ax3.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+            ax3.contour(radio_cutout.data,levels=radio_contours,colors='grey')
+    
+            ax4.imshow(img,transform=ax4.get_transform(des_wcs),origin='lower') 
+            ax5.imshow(img,transform=ax5.get_transform(des_wcs),origin='lower') 
+            ax6.imshow(img,transform=ax6.get_transform(des_wcs),origin='lower')
+            ax4.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
+            ax5.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
+            ax6.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
             
-            ax7.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax7.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
-            ax8.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax8.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
-            ax9.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax9.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
-            
-        except:
-            print("wise failed")
-            for k in range(0,len(wise_tiles_to_use[0])):
-                #get wise cutout 
-                wise_im=settings.WISEfiles_dir.split("*")[0]+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
-                wise_hdu=fits.open(wise_im)
-                wise_data= wise_hdu[0].data
-                wise_wcs= WCS(wise_hdu[0].header)
-                wise_hdu.close()
+            try:
+                wise_list=[]
+                for k in range(0,len(wise_tiles_to_use[0])):
+                    #get wise cutout 
+                    wise_im=settings.WISEfiles_dir.split("*")[0]+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
+                    wise_hdu=fits.open(wise_im)
+                    wise_data= wise_hdu[0].data
+                    wise_wcs= WCS(wise_hdu[0].header)
+                    wise_hdu.close()
+                    wise_cutout=Cutout2D(wise_data,position=coords,size=1.05*arcmins*u.arcmin,wcs=wise_wcs,mode='trim')
+                    wise_hdu=fits.PrimaryHDU(data=wise_cutout.data, header=wise_cutout.wcs.to_header())               
+                    wise_list.append(wise_hdu)
+    
+                if len(wise_list)==0:
+                    print("something wrong")
+                elif len(wise_list)==1:
+                    print("only one wise")
+                    #only one image so no need to mosaic
+                    wise_data=wise_list[0].data
+                    wise_wcs=WCS(wise_list[0].header)
+    
+                else:
+                    print("combining wise")
+                    #need to combine them
+                    wise_wcs, wise_shape_out = find_optimal_celestial_wcs(wise_list)
+                    wise_data, footprint_wise = reproject_and_coadd(wise_list,wise_wcs,shape_out=wise_shape_out,reproject_function=reproject_interp)
+    
+                #wise_cutout_hdu=fits.PrimaryHDU(data=wise_data, header=wise_wcs.to_header()) 
+                #wise_cutout_hdu.writeto(filename)
+                
                 ax7.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax7.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
                 ax8.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax8.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
                 ax9.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax9.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
-
-        ax7.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
-        ax8.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
-        ax9.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
-
-
-        ax1.set_xlim(0.75*npix_edge,(1.25*npix_edge)-1)
-        ax1.set_ylim(0.75*npix_edge,(1.25*npix_edge)-1)
-        ax2.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
-        ax2.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
-        ax3.set_xlim(0,(2*npix_edge)-1)
-        ax3.set_ylim(0,(2*npix_edge)-1)
-        
-        ax4.set_xlim(0.75*npix_edge,(1.25*npix_edge)-1)
-        ax4.set_ylim(0.75*npix_edge,(1.25*npix_edge)-1)
-        ax5.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
-        ax5.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
-        ax6.set_xlim(0,(2*npix_edge)-1)
-        ax6.set_ylim(0,(2*npix_edge)-1)
-        
-        ax7.set_xlim(0.75*npix_edge,(1.25*npix_edge)-1)
-        ax7.set_ylim(0.75*npix_edge,(1.25*npix_edge)-1)
-        ax8.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
-        ax8.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
-        ax9.set_xlim(0,(2*npix_edge)-1)
-        ax9.set_ylim(0,(2*npix_edge)-1)
-
-
-        ax1.axis('off')
-        ax2.axis('off')
-        ax3.axis('off')
-        ax4.axis('off')
-        ax5.axis('off')
-        ax6.axis('off')
-        ax7.axis('off')
-        ax8.axis('off')
-        ax9.axis('off')
-
-        plt.rc('font', size=10)    
-        plt.annotate('Radio',xy=(0.08,0.75),xycoords='figure fraction',ha='center',va='center',rotation=90)
-        plt.annotate('Optical',xy=(0.08,0.45),xycoords='figure fraction',ha='center',va='center',rotation=90)
-        plt.annotate('Infrared',xy=(0.08,0.15),xycoords='figure fraction',ha='center',va='center',rotation=90)
-        plt.annotate('Zoomed in',xy=(0.25,0.91),xycoords='figure fraction',ha='center')
-        plt.annotate('Default',xy=(0.55,0.91),xycoords='figure fraction',ha='center')
-        plt.annotate('Zoomed out',xy=(0.85,0.91),xycoords='figure fraction',ha='center')
-        plt.subplots_adjust(left=0.1, bottom=0.01, right=0.99, top=0.9, hspace=0,wspace=0.02) # control space between figure and whitespace
-
-        plt.savefig(filename)
-        
-        xp,yp=utils.skycoord_to_pixel(coords,radio_cutout.wcs)
-
-        #plt.rcParams.update({'lines.linewidth':1.2})
-
-        ax1.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax1.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax1.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax1.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-
-        ax2.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax2.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax2.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax2.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-
-        ax3.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax3.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax3.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax3.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-
-        ax4.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax4.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax4.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax4.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-
-        ax5.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax5.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax5.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax5.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-
-        ax6.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax6.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax6.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax6.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-        
-        ax7.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax7.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax7.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax7.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-        
-        ax8.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax8.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax8.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax8.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-        
-        ax9.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-        ax9.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-        ax9.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-        ax9.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-
-        plt.savefig(filename_cross)
-        plt.show()     
+                
+            except:
+                print("wise failed")
+                for k in range(0,len(wise_tiles_to_use[0])):
+                    #get wise cutout 
+                    wise_im=settings.WISEfiles_dir.split("*")[0]+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
+                    wise_hdu=fits.open(wise_im)
+                    wise_data= wise_hdu[0].data
+                    wise_wcs= WCS(wise_hdu[0].header)
+                    wise_hdu.close()
+                    ax7.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax7.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
+                    ax8.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax8.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
+                    ax9.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax9.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
+    
+            ax7.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
+            ax8.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
+            ax9.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
+    
+    
+            ax1.set_xlim(0.75*npix_edge,(1.25*npix_edge)-1)
+            ax1.set_ylim(0.75*npix_edge,(1.25*npix_edge)-1)
+            ax2.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
+            ax2.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
+            ax3.set_xlim(0,(2*npix_edge)-1)
+            ax3.set_ylim(0,(2*npix_edge)-1)
+            
+            ax4.set_xlim(0.75*npix_edge,(1.25*npix_edge)-1)
+            ax4.set_ylim(0.75*npix_edge,(1.25*npix_edge)-1)
+            ax5.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
+            ax5.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
+            ax6.set_xlim(0,(2*npix_edge)-1)
+            ax6.set_ylim(0,(2*npix_edge)-1)
+            
+            ax7.set_xlim(0.75*npix_edge,(1.25*npix_edge)-1)
+            ax7.set_ylim(0.75*npix_edge,(1.25*npix_edge)-1)
+            ax8.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
+            ax8.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
+            ax9.set_xlim(0,(2*npix_edge)-1)
+            ax9.set_ylim(0,(2*npix_edge)-1)
+    
+    
+            ax1.axis('off')
+            ax2.axis('off')
+            ax3.axis('off')
+            ax4.axis('off')
+            ax5.axis('off')
+            ax6.axis('off')
+            ax7.axis('off')
+            ax8.axis('off')
+            ax9.axis('off')
+    
+            plt.rc('font', size=10)    
+            plt.annotate('Radio',xy=(0.08,0.75),xycoords='figure fraction',ha='center',va='center',rotation=90)
+            plt.annotate('Optical',xy=(0.08,0.45),xycoords='figure fraction',ha='center',va='center',rotation=90)
+            plt.annotate('Infrared',xy=(0.08,0.15),xycoords='figure fraction',ha='center',va='center',rotation=90)
+            plt.annotate('Zoomed in',xy=(0.25,0.91),xycoords='figure fraction',ha='center')
+            plt.annotate('Default',xy=(0.55,0.91),xycoords='figure fraction',ha='center')
+            plt.annotate('Zoomed out',xy=(0.85,0.91),xycoords='figure fraction',ha='center')
+            plt.subplots_adjust(left=0.1, bottom=0.01, right=0.99, top=0.9, hspace=0,wspace=0.02) # control space between figure and whitespace
+    
+            plt.savefig(filename)
+            
+            xp,yp=utils.skycoord_to_pixel(coords,radio_cutout.wcs)
+    
+            #plt.rcParams.update({'lines.linewidth':1.2})
+    
+            ax1.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax1.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax1.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax1.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+    
+            ax2.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax2.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax2.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax2.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+    
+            ax3.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax3.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax3.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax3.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+    
+            ax4.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax4.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax4.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax4.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+    
+            ax5.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax5.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax5.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax5.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+    
+            ax6.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax6.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax6.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax6.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+            
+            ax7.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax7.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax7.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax7.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+            
+            ax8.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax8.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax8.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax8.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+            
+            ax9.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+            ax9.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+            ax9.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+            ax9.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+    
+            plt.savefig(filename_cross)
+            plt.show()     
 #%%
-    # =============================================================================
-    # Create standlone cutouts
-    # =============================================================================
-    if settings.create_cutout:
-        #Create file
-        cutout_suffix = ""
-        cutout_filename =settings.cutout_dir+"SB"+settings.SB+src+cutout_suffix
-        ut.make_dir(settings.cutout_dir) #Checks if directory already exists
-        if settings.export_fits_cutout:
-            radio_cutout_small = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge), wcs=wcs, mode='trim')
-            hdu[0].data = radio_cutout_small.data
-            hdu[0].header.update(radio_cutout_small.wcs.to_header())
-            hdu.writeto(cutout_filename+".fits", overwrite=True)
-        "Create cutout figure"
-        fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi,1024/my_dpi))
-        ax = plt.subplot(111,projection=radio_cutout.wcs,fc='grey')
-        ax.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
-        ax.contour(radio_cutout.data,levels=radio_contours,colors='grey')
-        ax.axis('off')
-        ax.set_axis_off()
-        ax.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
-        ax.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
-        if settings.use_cross:
-            cutout_suffix = "_cross"
-            ax.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
-            ax.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
-            ax.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
-            ax.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
-        plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
-        plt.savefig(cutout_filename+".png",pad_inches=0)
+        # =============================================================================
+        # Create standlone cutouts
+        # =============================================================================
+        if settings.create_cutout:
+            print("Creating 6x6 cutout for source: {}".format(src))
+            #Create file
+            cutout_suffix = ""
+            cutout_filename =settings.cutout_dir+"SB"+settings.SB+src+cutout_suffix
+            cutout_dir = settings.cutout_dir
+            if excluded_source:
+                "Dissect and append to the filename"
+                cutout_filename = cutout_filename.split(settings.cutout_dir.split(settings.prefix)[-1])[0] +"excluded_" + settings.cutout_dir.split(settings.prefix)[-1] + cutout_filename.split(settings.cutout_dir.split(settings.prefix)[-1])[-1]
+                cutout_dir=  cutout_filename.split(settings.field_ref)[0]
+            ut.make_dir(cutout_dir) #Checks if directory already exists
+            if settings.export_fits_cutout:
+                radio_cutout_small = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge), wcs=wcs, mode='trim')
+                hdu[0].data = radio_cutout_small.data
+                hdu[0].header.update(radio_cutout_small.wcs.to_header())
+                hdu.writeto(cutout_filename+".fits", overwrite=True)
+            "Create cutout figure"
+            if settings.skip_cutout_plotting ==False:
+                fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi,1024/my_dpi))
+                ax = plt.subplot(111,projection=radio_cutout.wcs,fc='grey')
+                ax.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+                ax.contour(radio_cutout.data,levels=radio_contours,colors='grey')
+                ax.axis('off')
+                ax.set_axis_off()
+                ax.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
+                ax.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
+                if settings.use_cross:
+                    cutout_suffix = "_cross"
+                    ax.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
+                    ax.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
+                    ax.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
+                    ax.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
+                plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+                plt.savefig(cutout_filename+".png",pad_inches=0)
 
 hdu.close()   #Close radio fits file
 #%%
-"Use numpy to save sources in the exclusion list"
-if len(exclusion_list)>0:
-    np.savetxt(settings.exclusion_list,exclusion_list)
+"Use numpy to save sources in the exclusion list - Removed temporarily"
+#if len(exclusion_list)>0:
+#    np.savetxt(settings.exclusion_list,exclusion_list)
 #%%
 
 # =============================================================================
