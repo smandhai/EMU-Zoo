@@ -66,8 +66,8 @@ image='image.i.SB'+SB+'.cont.taylor.0.restored.fits'
 
 #note that there are two catalogue types: island and component
 #cat=dataloc+'catalogues/AS101_Continuum_Island_Catalogue_'+SB+'.csv'
-cat=dataloc+settings.cat_sub.format(SB)
-island=settings.island #change to true if using island catalogue
+cat=dataloc+settings.cat_sub.format(SB,settings.component_number)
+cat_type=settings.cat_type #change to true if using island catalogue
 
 # folder for cutout data output if you want to save radio fits files
 # not currently implemented due to data storage issues
@@ -185,12 +185,17 @@ if override_src != None:
     else:
         if type(override_src) == str: #Convert single source name to a list
             override_src = [override_src]
-    if island:
+    if cat_type=="island":
         _,find_src,_=np.intersect1d(data_sorted[:,6],override_src,return_indices=True)
         #find_src = np.where(np.asarray(data_sorted[:,6]).astype(str)==override_src)
-    else:
+    elif cat_type=="catwise":
+        _,find_src,_=np.intersect1d(data_sorted[:,2],override_src,return_indices=True)
+    elif cat_type=="component":
         _,find_src,_=np.intersect1d(data_sorted[:,7],override_src,return_indices=True)
         #find_src = np.where(np.asarray(data_sorted[:,7]).astype(str)==override_src)
+    elif cat_type=="component_new":
+        _,find_src,_=np.intersect1d(data_sorted[:,8],override_src,return_indices=True)
+        
     if len(find_src)>0:
         data_sorted = data_sorted[find_src]
     else:
@@ -206,7 +211,7 @@ for i in range(0,len(data_sorted)):
         print(i)
         #or use a better tracking method idk
 
-    if island==True:
+    if settings.cat_type=="island":
     	#get values from catalogue file
     	# not all of these are used but I have left them in
         src = data_sorted[i,6]    
@@ -227,8 +232,16 @@ for i in range(0,len(data_sorted)):
         x_cen = float(data_sorted[i,35])
         y_cen = float(data_sorted[i,36])
         rms_median = data_sorted[i,24]
+    elif settings.cat_type=="catwise":
+        src=data_sorted[i,2]
+        ra_hms_cont	=data_sorted[i,3]
+        dec_dms_cont=data_sorted[i,4]
+        ra_deg_cont	=data_sorted[i,5]
+        dec_deg_cont=data_sorted[i,6]      
+        background_noise =float(data_sorted[i,32]) 
+        rms_median = data_sorted[i,32]    
 
-    else:
+    elif settings.cat_type=='component':
     	#component catalogue being used
     
         src=data_sorted[i,7]
@@ -240,7 +253,21 @@ for i in range(0,len(data_sorted)):
         rms_median = data_sorted[i,32]
 
         #re-iterating todo: change to header names rather than index (likely to break)	
+    elif settings.cat_type=='component_new':
+    	#component catalogue being used
+    
+        src=data_sorted[i,8]
+        ra_hms_cont	=data_sorted[i,9]
+        dec_dms_cont=data_sorted[i,10]
+        ra_deg_cont	=data_sorted[i,11]
+        dec_deg_cont=data_sorted[i,12]      
+        background_noise =float(data_sorted[i,38]) 
+        rms_median = data_sorted[i,33]
 
+        #re-iterating todo: change to header names rather than index (likely to break)	
+
+    else:
+        raise ValueError("Catalogue type is not valid")
     filename=overlayloc+src+overlay_suffix
     filename_cross=overlayloc+src+'_cross_'+overlay_suffix
     dir_to_save= settings.radio_output.split(settings.field_ref)[0].split(settings.prefix)[-1].split("/")
@@ -295,7 +322,12 @@ for i in range(0,len(data_sorted)):
         radio_contours = [basecont * i for i in contourmults]
        
         radio_max=np.nanmax(radio_cutout.data)
-        nconts=np.nanmax(np.flatnonzero(radio_contours < radio_max))
+        cont_cond = np.flatnonzero(radio_contours < radio_max)
+        if len(cont_cond)>0:
+            nconts=np.nanmax(cont_cond)
+        else:
+            nconts = settings.cont_limit
+            excluded_source = True #The data is too noisy
         #Only choose a selected number of contours
         "Restrict number of shown contours"
         "Trim the radio contours"
@@ -303,12 +335,16 @@ for i in range(0,len(data_sorted)):
         # if len(radio_contours) > settings.cont_limit:
         #     radio_hist,radio_bins = np.histogram(radio_contours,bins=settings.cont_limit) 
         #     radio_contours = radio_bins+ (radio_bins[1]-radio_bins[0])/2        
-        radio_contours = np.linspace(radio_contours.min(),radio_contours.max(),settings.cont_limit)
-        
+        if len(radio_contours)>0:
+            radio_contours = np.linspace(radio_contours.min(),radio_contours.max(),settings.cont_limit)
+        else:
+            #radio_contours = np.linspace(radio_contours.min(),radio_contours.max(),settings.cont_limit)
+            radio_contours = np.asarray([radio_cutout.data[~np.isnan(radio_cutout.data)].max(),basecont])
         #radio_contours = np.quantile(radio_cutout.data,[0.97,0.98,0.99])
         "Log 2 increments - works well but solo contours still exist"
-        radio_contours= np.logspace(np.log2(radio_contours.min()*0.6),np.log2(radio_contours.max()),settings.cont_limit,base=2)+background_noise/1000
         nconts =settings.cont_limit
+        radio_contours= np.logspace(np.log2(radio_contours.min()*0.6),np.log2(radio_contours.max()),nconts,base=2)+background_noise/1000
+        
         #print(radio_contours, filename)
         # =============================================================================
         #         MASKING TEST - Comment on during actual runs
