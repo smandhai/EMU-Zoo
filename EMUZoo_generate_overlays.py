@@ -276,7 +276,7 @@ for i in range(0,len(data_sorted)):
     # check to see if file already exists for this source
     # aka you shouldn't be able to overwrite existing files unless you tweak this!
     excluded_source =False #Check if the source should be excluded
-    if (os.path.isfile(filename) == False):#|(os.path.isfile(filename) == True): #Second condition is for debugging
+    if (os.path.isfile(filename) == False)|settings.overwrite:#|(os.path.isfile(filename) == True): #Second condition is for debugging
     	#print(i,src)
         coords=SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit=u.degree)   
 
@@ -315,7 +315,9 @@ for i in range(0,len(data_sorted)):
         norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.997)
         # basecont=max(min(norm_background,float(rms_median)/1e3*background_noise,0.00012),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
         #basecont=max(min(norm_background,0.00012,float(rms_median)/100),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
-        basecont = max(norm_background,background_noise/1000)
+        "This snippet will ensure the image isn't overshadowed if it's noisy"
+        min_thresh = np.quantile(radio_cutout.data[~np.isnan(radio_cutout.data)],0.99)
+        basecont = min(max(norm_background,background_noise/1000),min_thresh)
         #basecont = 0.00012
         # else:
             # basecont=max(min(norm_background,float(data_sorted[i,32])/1e3*background_noise,0.00012),background_noise/1000)
@@ -362,6 +364,7 @@ for i in range(0,len(data_sorted)):
         if len(np.where(radio_cutout_window>0)[1]) ==0:
             "Reset filename to exclude source and place it in another directory"
             filename=  filename.split(dir_to_save)[0]+settings.exclusion_dir.split(settings.prefix)[-1]+filename.split(dir_to_save)[1]
+            filename_cross =filename.split(".")[0] +"_cross_"+filename.split(".")[-1] 
             exclusion_list.append(src)
             excluded_source = True
             if (os.path.isfile(filename) == True):
