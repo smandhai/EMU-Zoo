@@ -44,6 +44,56 @@ def ashinh_scale(array,zeropoint=0,scale=1):
 def percentile(array,percent):
     val=np.percentile(array[np.isfinite(array)],percent)
     return val
+
+def masking(data,contours,mask_value=0,ppa=30,exclude=True):
+    excluded_source=False
+    x_size,y_size= data.shape
+    pixels_per_arcmin = ppa
+    # selection_window_x = (int(x_size/2 - pixels_per_arcmin),int(x_size/2 + pixels_per_arcmin))
+    # selection_window_y = (int(y_size/2 - pixels_per_arcmin),int(y_size/2 + pixels_per_arcmin))
+    # data = data[selection_window_x[0]:selection_window_x[1],
+    #                       selection_window_y[0]:selection_window_y[1]]
+    masked_data = np.array(data)
+    "Debug contour plotting"
+    #plt.imshow(masked_data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+    cs = plt.contour(masked_data,levels=contours,colors='grey')
+    "Find the average distance from the centre of the frame"
+    r = np.asarray([np.mean(np.linalg.norm(cs.allsegs[0][i]-(x_size/2,y_size/2),axis=1)) for i in range(len(cs.allsegs[0]))])
+    cs_cond = np.where(r==r.min())[0][0]
+    x = cs.allsegs[0][cs_cond][:,0]
+    y = cs.allsegs[0][cs_cond][:,1]
+    plt.plot(x,y)
+    masked_data[(masked_data<contours[0])]= 0 #Remove all background
+    "Radius to boundary"
+    #r= np.sqrt(x**2+y**2)
+    #theta = np.arccos(x/r)
+    #x_split = np.split(tiny,np.round(x).astype(int))
+    #y_split = np.split(tiny,np.round(y).astype(int))
+    #tiny.T[x.astype(int),y.astype(int)]=0 #Show boundary
+    #plt.imshow(masked_data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+    mask_sorter = np.argsort(np.round(x).astype(int)) #Arrange values that need to be masked
+    x_sorted = np.round(x).astype(int)[mask_sorter] #Order
+    y_sorted = np.round(y).astype(int)[mask_sorter]
+    unique_x_sorted = np.unique(x_sorted) #Find rows that need to be masked over
+    "Mask out the main source row by row"
+    for x_ind in unique_x_sorted:
+        cond = np.where(x_sorted==x_ind)
+        #print(tiny.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1])
+        "Mask out the source"
+        row = masked_data.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1] 
+        if len(np.where(row>contours[1])):
+            #print("Multi-contour source, do not exclude")
+            exclude=False
+        masked_data.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1] = mask_value
+    #plt.imshow(tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+    #tiny[tiny<radio_contours[1]]= 0
+    #plt.imshow(tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+    "If there's a bright source found after the source has been masked out"
+    if (len(np.where(masked_data>contours[1])[0]) !=0)&(exclude==True):
+        print("Source is to be excluded")
+        excluded_source=True
+    plt.close() #Ensures the figure has been closed
+    return masked_data,excluded_source
 #-----------------------------------------------------------
 
 # =============================================================================
@@ -358,10 +408,20 @@ for i in range(0,len(data_sorted)):
         selection_window_x = (int(x_size/2 - pixels_per_arcmin),int(x_size/2 + pixels_per_arcmin))
         selection_window_y = (int(y_size/2 - pixels_per_arcmin),int(y_size/2 + pixels_per_arcmin))
         radio_cutout_window = radio_cutout_contours[selection_window_x[0]:selection_window_x[1],
-                              selection_window_y[0]:selection_window_y[1]]
+                            selection_window_y[0]:selection_window_y[1]]
+#%%     # =============================================================================
+        #        Create smaller masking window to filter bright sources 
+        # =============================================================================
+
+        radio_cutout_tiny = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge/6*2), wcs=wcs, mode='trim')
+        masked_tiny,excluded_source = masking(radio_cutout_tiny.data,radio_contours,mask_value=0)
         
+        "Remove single contours"
+        if settings.remove_single_contours:
+            masked,_ = masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
+#%%
         "Check if there is a source within the masked region"
-        if len(np.where(radio_cutout_window>0)[1]) ==0:
+        if (len(np.where(radio_cutout_window>0)[1]) ==0)|(excluded_source==True):
             "Reset filename to exclude source and place it in another directory"
             filename=  filename.split(dir_to_save)[0]+settings.exclusion_dir.split(settings.prefix)[-1]+filename.split(dir_to_save)[1]
             filename_cross =filename.split(".")[0] +"_cross_"+filename.split(".")[-1] 
@@ -606,7 +666,8 @@ for i in range(0,len(data_sorted)):
             ax9.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
     
             plt.savefig(filename_cross)
-            plt.show()     
+            plt.show()
+            plt.close()
 #%%
         # =============================================================================
         # Create standlone cutouts
@@ -638,6 +699,7 @@ for i in range(0,len(data_sorted)):
                 ax.set_xlim(0.5*npix_edge,(1.5*npix_edge)-1)
                 ax.set_ylim(0.5*npix_edge,(1.5*npix_edge)-1)
                 if settings.use_cross:
+                    xp,yp=utils.skycoord_to_pixel(coords,radio_cutout.wcs)
                     cutout_suffix = "_cross"
                     ax.axhline(y=yp,xmin=0,xmax=0.45,c='w',linestyle=':')
                     ax.axhline(y=yp,xmin=0.55,xmax=1,c='w',linestyle=':')
@@ -645,6 +707,7 @@ for i in range(0,len(data_sorted)):
                     ax.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
                 plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
                 plt.savefig(cutout_filename+".png",pad_inches=0)
+                plt.close(fig)
 
 hdu.close()   #Close radio fits file
 #%%
