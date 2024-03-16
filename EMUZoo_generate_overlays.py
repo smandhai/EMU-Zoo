@@ -77,20 +77,29 @@ def masking(data,contours,mask_value=0,ppa=30,exclude=True):
         y_sorted = np.round(y).astype(int)[mask_sorter]
         unique_x_sorted = np.unique(x_sorted) #Find rows that need to be masked over
         "Mask out the main source row by row"
+        pixel_bright = 0 #Initialise number of bright pixels
         for x_ind in unique_x_sorted:
             cond = np.where(x_sorted==x_ind)
             #print(tiny.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1])
             "Mask out the source"
             row = masked_data.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1] 
             if len(np.where(row>contours[1])[0])>1:
-                print("Multi-contour source, do not exclude")
+                # print("Multi-contour source, do not exclude")
                 excluded_source=False
                 exclude=False
+                "If there's a single bright pixel"
+                pixel_bright += len(np.where(row>contours[1])[0])
+                
                 #print(len(np.where(row>contours[1])[0]))
             masked_data.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1] = mask_value
         #plt.imshow(tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
         #tiny[tiny<radio_contours[1]]= 0
         #plt.imshow(tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+        # print(pixel_bright)
+        if pixel_bright <=1:
+            "If there's a single bright pixel"
+            exclude=True
+            excluded_source=True
         "If there's a bright source found after the source has been masked out"
         if (len(np.where(masked_data>contours[1])[0]) !=0)&(exclude==True):
             print("Source is to be excluded")
