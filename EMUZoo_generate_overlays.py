@@ -46,6 +46,7 @@ def percentile(array,percent):
     return val
 
 def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
+    global cs
     excluded_source=False
     x_size,y_size= data.shape
     pixels_per_arcmin = ppa
@@ -54,17 +55,82 @@ def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
     # data = data[selection_window_x[0]:selection_window_x[1],
     #                       selection_window_y[0]:selection_window_y[1]]
     masked_data = np.array(data)
+    masked_data[(masked_data<contours[0])]= 0 #Remove all background
     "Debug contour plotting"
     #plt.imshow(masked_data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
     cs = plt.contour(masked_data,levels=contours,colors='grey')
+
     "Find the average distance from the centre of the frame"
-    r = np.asarray([np.mean(np.linalg.norm(cs.allsegs[0][i]-(x_size/2,y_size/2),axis=1)) for i in range(len(cs.allsegs[0]))])
+    r = np.asarray([np.quantile(np.linalg.norm(cs.allsegs[0][i]-(x_size/2,y_size/2),axis=1),0.6) for i in range(len(cs.allsegs[0]))])
+    # r_ind_sorted=  np.argsort(r)
+    # r = r[r_ind_sorted]
+    #print(r)
+    d_left = np.where(masked_data[int(x_size/2)-1:0:-1,int(y_size/2)] ==0)[0]
+    d_right = np.where(masked_data[int(x_size/2)-1:int(x_size):,int(y_size/2)] ==0)[0]
+    d_down =  np.where(masked_data[int(x_size/2),int(y_size/2)-1:0:-1] ==0)[0]
+    d_up =  np.where(masked_data[int(x_size/2),int(y_size/2)-1:int(y_size)+1] ==0)[0]
+    if d_left.size == 0:
+        d_left = [0]
+    if d_right.size == 0:
+        d_right = [0]
+    if d_up.size == 0:
+        d_up = [0]
+    if d_down.size==0:
+        d_down = [0]
+        
+    
+    extended_source =False
+    
+    try:
+        d_mean = np.mean([d_left[0],d_right[0],d_down[0],d_up[0]])
+        d_mean = np.amax([d_left[0]+d_right[0],d_down[0]+d_up[0]])
+        #print(d_mean)
+        if (d_mean > x_size/2)|(d_mean > y_size/2):
+            print("Potential extended source")
+            extended_source =True
+        # print([d_left[0],d_right[0],d_down[0],d_up[0]])
+    except:
+        print("Potential extended source")
+        extended_source =True #This is triggered if the source is likely large
+        d_mean = np.mean([x_size,y_size])
+       # d_mean = np.mean([d_left[0],d_right[0],d_down[0],d_up[0]])
+        d_mean = np.amax([d_left[0]+d_right[0],d_down[0]+d_up[0]])
+    # print(d_mean)
+    # print(r)
     if len(r)>0:
-        cs_cond = np.where((r<np.quantile(r[r<ppa],0.5))&(r<ppa))[-1][0]
+        if len(r)>1:
+            if len(r[r<ppa])>0:
+                r_cond = (r<np.quantile(r[r<ppa],0.5))&(r<ppa)
+                #print(r[r_cond])
+                if (x_size>ppa)|(y_size>ppa)&(extended_source ==True):
+                    r_cond = r<np.quantile(r,0.5)
+            else:
+                r_cond = []
+            if len(r[r_cond])==0:
+                # print(np.quantile(r,0.1))
+                # print(np.quantile(r,0.9))
+                #extended_source=True
+                r_cond = r<np.quantile(r,0.50)
+                r_cond = r==r.min()
+            # print(r_cond)
+            cs_cond = np.where(r_cond)
+            # if (len(cs_cond)>1) &(extended_source==False):
+            #     print(12121)
+            #     cs_cond = cs_cond[np.where(np.abs(r[cs_cond]-d_mean) ==np.abs(r[cs_cond]-d_mean).min())]
+            cs_cond = np.where(r_cond)[-1]
+            # print(cs_cond)
+            cs_cond = cs_cond[0]
+            
+            # print(r[r_cond])
+            # print(r[cs_cond])
+        else:
+            cs_cond = 0
+        
+        # print(r_ind_sorted)
+        # print(cs.allsegs[0])
         x = cs.allsegs[0][cs_cond][:,0]
         y = cs.allsegs[0][cs_cond][:,1]
         plt.plot(x,y)
-        masked_data[(masked_data<contours[0])]= 0 #Remove all background
         "Radius to boundary"
         #r= np.sqrt(x**2+y**2)
         #theta = np.arccos(x/r)
@@ -280,7 +346,7 @@ exclusion_list = [] #List of sources to be excluded
 
 for i in range(0,len(data_sorted)):
     if i % 100 == 0:
-        print(i)
+        print("Current Iteration: ",i)
         #or use a better tracking method idk
 
     if settings.cat_type=="island":
@@ -384,7 +450,7 @@ for i in range(0,len(data_sorted)):
         contourmults=np.power(2,contourexps)
         #basecont=3.*background_noise/1000.
         #OR
-        norm_background=np.quantile(np.random.normal(scale=background_noise/1000,size=int(1e6)),0.997)
+        norm_background=np.quantile(np.random.normal(scale=background_noise/1000,size=int(1e7)),0.997)
         # basecont=max(min(norm_background,float(rms_median)/1e3*background_noise,0.00012),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
         #basecont=max(min(norm_background,0.00012,float(rms_median)/100),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
         "This snippet will ensure the image isn't overshadowed if it's noisy"
@@ -436,11 +502,16 @@ for i in range(0,len(data_sorted)):
         # =============================================================================
 
         radio_cutout_tiny = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge/6*2), wcs=wcs, mode='trim')
-        masked_tiny,excluded_source = masking(radio_cutout_tiny.data,radio_contours,mask_value=0)
+        masked_tiny,excluded_source = masking(radio_cutout_tiny.data,radio_contours,mask_value=100)
         #print(2322)
+        plt.imshow(masked_tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
         "Remove single contours"
         if settings.remove_single_contours:
-            masked,_ = masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
+            if excluded_source:
+                masked,excluded_source= masking(radio_cutout.data,radio_contours,mask_value=100,exclude=False)
+            else:
+                masked,_= masking(radio_cutout.data,radio_contours,mask_value=100,exclude=False)
+            plt.imshow(masked,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
 #%%
         "Check if there is a source within the masked region"
         if (len(np.where(radio_cutout_window>0)[1]) ==0)|(excluded_source==True):
