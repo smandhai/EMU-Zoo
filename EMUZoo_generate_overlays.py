@@ -45,7 +45,7 @@ def percentile(array,percent):
     val=np.percentile(array[np.isfinite(array)],percent)
     return val
 
-def masking(data,contours,mask_value=0,ppa=30,exclude=True):
+def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
     excluded_source=False
     x_size,y_size= data.shape
     pixels_per_arcmin = ppa
@@ -60,7 +60,7 @@ def masking(data,contours,mask_value=0,ppa=30,exclude=True):
     "Find the average distance from the centre of the frame"
     r = np.asarray([np.mean(np.linalg.norm(cs.allsegs[0][i]-(x_size/2,y_size/2),axis=1)) for i in range(len(cs.allsegs[0]))])
     if len(r)>0:
-        cs_cond = np.where(r==r.min())[0][0]
+        cs_cond = np.where((r<np.quantile(r[r<ppa],0.5))&(r<ppa))[-1][0]
         x = cs.allsegs[0][cs_cond][:,0]
         y = cs.allsegs[0][cs_cond][:,1]
         plt.plot(x,y)
@@ -82,28 +82,35 @@ def masking(data,contours,mask_value=0,ppa=30,exclude=True):
             cond = np.where(x_sorted==x_ind)
             #print(tiny.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1])
             "Mask out the source"
-            row = masked_data.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1] 
-            if len(np.where(row>contours[1])[0])>1:
-                # print("Multi-contour source, do not exclude")
+            row = masked_data.T[x_ind,y_sorted[cond].min()-pixel_thresh:y_sorted[cond].max()+1+pixel_thresh] 
+            cond_row =  np.where(row>=contours[1])[0]
+            # print(row[cond_row])
+            if len(cond_row)>=1:
+                #print("Multi-contour source, do not exclude")
                 excluded_source=False
                 exclude=False
                 "If there's a single bright pixel"
-                pixel_bright += len(np.where(row>contours[1])[0])
+                pixel_bright += len(np.where(row>=contours[1])[0])
                 
                 #print(len(np.where(row>contours[1])[0]))
             masked_data.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1] = mask_value
         #plt.imshow(tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
         #tiny[tiny<radio_contours[1]]= 0
         #plt.imshow(tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
-        # print(pixel_bright)
-        if pixel_bright <=1:
+
+        "If there's a bright source found after the source has been masked out"
+        #print("pixels ",pixel_bright)
+        if pixel_bright <=pixel_thresh:
             "If there's a single bright pixel"
             exclude=True
             excluded_source=True
-        "If there's a bright source found after the source has been masked out"
+        else:
+            exclude = False
+            excluded_source =False
         if (len(np.where(masked_data>contours[1])[0]) !=0)&(exclude==True):
             print("Source is to be excluded")
             excluded_source=True
+            
     else:
         print("No contours found")
         excluded_source=True
@@ -377,7 +384,7 @@ for i in range(0,len(data_sorted)):
         contourmults=np.power(2,contourexps)
         #basecont=3.*background_noise/1000.
         #OR
-        norm_background=np.quantile(np.abs(np.random.normal(scale=background_noise/1000,size=100000)),0.997)
+        norm_background=np.quantile(np.random.normal(scale=background_noise/1000,size=int(1e6)),0.997)
         # basecont=max(min(norm_background,float(rms_median)/1e3*background_noise,0.00012),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
         #basecont=max(min(norm_background,0.00012,float(rms_median)/100),background_noise/1000)#,float(data_sorted[i,31])/1e6)#0.00012 #Median Value
         "This snippet will ensure the image isn't overshadowed if it's noisy"
