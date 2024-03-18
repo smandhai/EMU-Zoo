@@ -48,11 +48,33 @@ def percentile(array,percent):
 	val=np.percentile(array[np.isfinite(array)],percent)
 	return val
 
-def point_check(contour,coord=(0,0)):
+def point_check(contour,coord=(0,0),search_pix = 10):
 	"Checks if a point exists within the contour"
 	point = Point(coord)
 	poly=  Polygon(contour)
 	exists = poly.contains(point)
+	if exists ==False:
+		"Search around the centre"
+		point = Point((coord[0]+search_pix,coord[1]))
+		poly=  Polygon(contour)
+		exists = poly.contains(point)
+		if exists:
+			return exists		
+		point = Point((coord[0]-search_pix,coord[1]))
+		poly=  Polygon(contour)
+		exists = poly.contains(point)	
+		if exists:
+			return exists		
+		point = Point((coord[0],coord[1]+search_pix))
+		poly=  Polygon(contour)
+		exists = poly.contains(point)
+		if exists:
+			return exists		
+		point = Point((coord[0],coord[1]-search_pix))
+		poly=  Polygon(contour)
+		exists = poly.contains(point)		
+		if exists:
+			return exists
 	return exists
 def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
 	global cs
@@ -176,6 +198,8 @@ def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
 		unique_x_sorted = np.unique(x_sorted) #Find rows that need to be masked over
 		"Mask out the main source row by row"
 		pixel_bright = 0 #Initialise number of bright pixels
+		excluded_source=True #Source is excluded unless it has a second contour
+		exclude = True
 		for x_ind in unique_x_sorted:
 			cond = np.where(x_sorted==x_ind)
 			#print(tiny.T[x_ind,y_sorted[cond].min():y_sorted[cond].max()+1])
@@ -206,7 +230,7 @@ def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
 			exclude = False
 			excluded_source =False
 		if (len(np.where(masked_data>contours[1])[0]) !=0)&(exclude==True):
-			print("Source is to be excluded")
+			print("Bright source found. Source is to be excluded")
 			excluded_source=True
 			
 	else:
@@ -540,12 +564,13 @@ for i in range(0,len(data_sorted)):
 
 		radio_cutout_tiny = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge/6*2), wcs=wcs, mode='trim')
 		masked_tiny,excluded_source = masking(radio_cutout_tiny.data,radio_contours,mask_value=0)
-		#print(2322)
+		#print(excluded_source)
 		plt.imshow(masked_tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
 		"Remove single contours"
 		if settings.remove_single_contours:
 			if excluded_source:
 				masked,excluded_source= masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
+				#print(excluded_source)
 			else:
 				masked,_= masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
 			plt.imshow(masked,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
