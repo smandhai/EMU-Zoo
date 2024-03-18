@@ -561,19 +561,25 @@ for i in range(0,len(data_sorted)):
 #%%	 # =============================================================================
 		#		Create smaller masking window to filter bright sources 
 		# =============================================================================
-
 		radio_cutout_tiny = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge/6*2), wcs=wcs, mode='trim')
-		masked_tiny,excluded_source = masking(radio_cutout_tiny.data,radio_contours,mask_value=0)
-		#print(excluded_source)
-		plt.imshow(masked_tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
-		"Remove single contours"
-		if settings.remove_single_contours:
-			if excluded_source:
-				masked,excluded_source= masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
-				#print(excluded_source)
-			else:
-				masked,_= masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
-			plt.imshow(masked,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+		if np.isnan(np.asarray(radio_cutout_tiny.data).min()):
+			excluded_source=True
+			warnings.warn("Invalid values found... source is likely on the edge of the detector image")
+		else:
+			
+			masked_tiny,excluded_source = masking(radio_cutout_tiny.data,radio_contours,mask_value=0)
+			#print(excluded_source)
+			plt.imshow(masked_tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+			"Remove single contours"
+			if settings.remove_single_contours:
+				if excluded_source:
+					masked,excluded_source= masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
+					#print(excluded_source)
+				else:
+					masked,_= masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
+				plt.imshow(masked,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
+			
+
 #%%
 		"Check if there is a source within the masked region"
 		if (len(np.where(radio_cutout_window>0)[1]) ==0)|(excluded_source==True):
