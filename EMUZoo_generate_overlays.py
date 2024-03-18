@@ -36,6 +36,7 @@ import utils as ut
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 from importlib import reload
+import warnings
 reload(settings)
 #%%
 #-----------------------------------------------------------
@@ -156,8 +157,9 @@ def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
 			cs_cond = cs_cond[0][0]
 		else:
 			#print(cs_cond)
-			raise ValueError("Insuffient contours: Potentially due to unclosed contours")
-		
+			warnings.warn("Insuffient contours: Potentially due to unclosed contours. Data not masked.")
+			excluded_source=True
+			return masked_data, excluded_source
 		x = cs.allsegs[0][cs_cond][:,0]
 		y = cs.allsegs[0][cs_cond][:,1]
 		plt.plot(x,y)
