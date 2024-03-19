@@ -52,29 +52,36 @@ def point_check(contour,coord=(0,0),search_pix = 5):
 	"Checks if a point exists within the contour"
 	point = Point(coord)
 	poly=  Polygon(contour)
+	#circle_p = Point(coord)
 	exists = poly.contains(point)
-	if exists ==False:
-		"Search around the centre"
-		point = Point((coord[0]+search_pix,coord[1]))
-		poly=  Polygon(contour)
-		exists = poly.contains(point)
-		if exists:
-			return exists		
-		point = Point((coord[0]-search_pix,coord[1]))
-		poly=  Polygon(contour)
-		exists = poly.contains(point)	
-		if exists:
-			return exists		
-		point = Point((coord[0],coord[1]+search_pix))
-		poly=  Polygon(contour)
-		exists = poly.contains(point)
-		if exists:
-			return exists		
-		point = Point((coord[0],coord[1]-search_pix))
-		poly=  Polygon(contour)
-		exists = poly.contains(point)		
-		if exists:
-			return exists
+	if exists ==False:	
+		"Searching around to check if pixels have been missed"
+		circle = point.buffer(search_pix)
+		exists = circle.intersects(poly)
+	
+# 	exists = poly.contains(point)
+# 	if exists ==False:
+# 		"Search around the centre"
+# 		point = Point((coord[0]+search_pix,coord[1]))
+# 		poly=  Polygon(contour)
+# 		exists = poly.contains(point)
+# 		if exists:
+# 			return exists		
+# 		point = Point((coord[0]-search_pix,coord[1]))
+# 		poly=  Polygon(contour)
+# 		exists = poly.contains(point)	
+# 		if exists:
+# 			return exists		
+# 		point = Point((coord[0],coord[1]+search_pix))
+# 		poly=  Polygon(contour)
+# 		exists = poly.contains(point)
+# 		if exists:
+# 			return exists		
+# 		point = Point((coord[0],coord[1]-search_pix))
+# 		poly=  Polygon(contour)
+# 		exists = poly.contains(point)		
+# 		if exists:
+# 			return exists
 	return exists
 def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
 	global cs
