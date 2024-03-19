@@ -48,7 +48,7 @@ def percentile(array,percent):
 	val=np.percentile(array[np.isfinite(array)],percent)
 	return val
 
-def point_check(contour,coord=(0,0),search_pix = 10):
+def point_check(contour,coord=(0,0),search_pix = 5):
 	"Checks if a point exists within the contour"
 	point = Point(coord)
 	poly=  Polygon(contour)
@@ -567,16 +567,16 @@ for i in range(0,len(data_sorted)):
 			warnings.warn("Invalid values found... source is likely on the edge of the detector image")
 		else:
 			
-			masked_tiny,excluded_source = masking(radio_cutout_tiny.data,radio_contours,mask_value=0)
+			masked_tiny,excluded_source = masking(radio_cutout_tiny.data,radio_contours,mask_value=settings.mask_value)
 			#print(excluded_source)
 			plt.imshow(masked_tiny,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
 			"Remove single contours"
 			if settings.remove_single_contours:
 				if excluded_source:
-					masked,excluded_source= masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
+					masked,excluded_source= masking(radio_cutout.data,radio_contours,mask_value=settings.mask_value,exclude=False)
 					#print(excluded_source)
 				else:
-					masked,_= masking(radio_cutout.data,radio_contours,mask_value=0,exclude=False)
+					masked,_= masking(radio_cutout.data,radio_contours,mask_value=settings.mask_value,exclude=False)
 				plt.imshow(masked,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
 			
 
