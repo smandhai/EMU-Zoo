@@ -386,10 +386,15 @@ ut.make_dir(settings.exclusion_dir) # Create exclusion directory
 
 #Override Source
 if override_src != None:
+	unique_srcs = False #Assume Unique srcs, by default every source is assumed to be unique
+
 	if settings.use_file:
 		#source_list = pd.read_csv(override_src,header=None)
 		source_list = np.genfromtxt(override_src,dtype=str)
 		override_src = list(source_list)
+		if len(settings.override_src[0].split("duplicate"))>1:
+			unique_srcs= True #Consider non-unique sources
+			
 	else:
 		if type(override_src) == str: #Convert single source name to a list
 			override_src = [override_src]
@@ -407,7 +412,7 @@ if override_src != None:
 		#find_src = np.where(np.asarray(data_sorted[:,7]).astype(str)==override_src)
 	elif cat_type=="component_new":
 		src_ind = 8
-	_,find_src,_=np.intersect1d(data_sorted[:,src_ind],override_src,assume_unique=True,return_indices=True)
+	_,find_src,_=np.intersect1d(data_sorted[:,src_ind],override_src,assume_unique=unique_srcs,return_indices=True)
 	if len(find_src)>0:
 		data_sorted = data_sorted[find_src]
 	else:
@@ -415,7 +420,7 @@ if override_src != None:
 	
 	"Special exception for sources in the duplicate file"
 	"Ensures that sources that are duplicated in the SAME field are accounted for only"
-	if len(settings.override_src.split("duplicate"))>1:
+	if len(settings.override_src[0].split("duplicate"))>1:
 		print("Special overwride file found... filtering out non-duplicates")
 		"Find the count of sources that exist multiple times in this field"
 		temp_srcs,temp_ind,temp_counts = np.unique(data_sorted[:,src_ind],return_index=True,return_counts=True)
@@ -498,7 +503,7 @@ for i in range(0,len(data_sorted)):
 	filename=overlayloc+src+overlay_suffix
 	filename_cross=overlayloc+src+'_cross_'+overlay_suffix
 	"Special exception for sources in the duplicate file"
-	if len(settings.override_src.split("duplicate"))>1:
+	if len(settings.override_src[0].split("duplicate"))>1:
 		print("Handling duplicate found in the same field")
 		overwrite = False
 		if src in duplicate_sources.keys():
