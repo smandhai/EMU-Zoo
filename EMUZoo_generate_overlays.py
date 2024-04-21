@@ -191,6 +191,7 @@ def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
 			return masked_data, excluded_source
 		x = cs.allsegs[0][cs_cond][:,0]
 		y = cs.allsegs[0][cs_cond][:,1]
+		#print(cs_cond)
 		plt.plot(x,y)
 		"Radius to boundary"
 		#r= np.sqrt(x**2+y**2)
@@ -264,8 +265,9 @@ override_src = settings.override_src #'J202254-540537' #"J202505-540405" 'J20225
 
 dataloc=settings.dataloc #askap data location
 WISEfiles=glob.glob(settings.WISEfiles_dir) #WISE raw data tiles location
-
+duplicate_sources = {} #A dictionary containing duplicate sources
 SB= settings.SB#'9351'
+add_suff= "" #Initialise extra suffix in case it needs to be added
 
 #hard coded image names due to inconsistent naming conventions but could be streamlined
 image='image.i.SB'+SB+'.cont.taylor.0.restored.fits'
@@ -391,22 +393,40 @@ if override_src != None:
 	else:
 		if type(override_src) == str: #Convert single source name to a list
 			override_src = [override_src]
+	src_ind = 0
 	if cat_type=="island":
-		_,find_src,_=np.intersect1d(data_sorted[:,6],override_src,return_indices=True)
+		src_ind = 6
+		#_,find_src,_=np.intersect1d(data_sorted[:,6],override_src,assume_unique=True,return_indices=True)
 		#find_src = np.where(np.asarray(data_sorted[:,6]).astype(str)==override_src)
 	elif cat_type=="catwise":
-		_,find_src,_=np.intersect1d(data_sorted[:,2],override_src,return_indices=True)
+		src_ind = 2
+		#_,find_src,_=np.intersect1d(data_sorted[:,2],override_src,assume_unique=True,return_indices=True)
 	elif cat_type=="component":
-		_,find_src,_=np.intersect1d(data_sorted[:,7],override_src,return_indices=True)
+		src_ind = 7
+		#_,find_src,_=np.intersect1d(data_sorted[:,7],override_src,assume_unique=True,return_indices=True)
 		#find_src = np.where(np.asarray(data_sorted[:,7]).astype(str)==override_src)
 	elif cat_type=="component_new":
-		_,find_src,_=np.intersect1d(data_sorted[:,8],override_src,return_indices=True)
-		
+		src_ind = 8
+	_,find_src,_=np.intersect1d(data_sorted[:,src_ind],override_src,assume_unique=True,return_indices=True)
 	if len(find_src)>0:
 		data_sorted = data_sorted[find_src]
 	else:
 		raise ValueError("Override value(s) not found")
-
+	
+	"Special exception for sources in the duplicate file"
+	"Ensures that sources that are duplicated in the SAME field are accounted for only"
+	if len(settings.override_src.split("duplicate"))>1:
+		print("Special overwride file found... filtering out non-duplicates")
+		"Find the count of sources that exist multiple times in this field"
+		temp_srcs,temp_ind,temp_counts = np.unique(data_sorted[:,src_ind],return_index=True,return_counts=True)
+		"Find where counts are >1 (i.e. duplicates). Only keep sources with duplicates"
+		keep_srcs = data_sorted[:,src_ind][temp_ind[np.where(temp_counts>1)] ]
+		"Find the indices to with the catalogue to pair duplicates with"
+		keep_inds = [np.where(data_sorted[:,src_ind]==keep_srcs[i]) for i in range(len(keep_srcs))]
+		if len(keep_inds) ==0:
+			raise ValueError("No duplicates found, nothing to do...")
+		"Overwrite data_sorted to remove non-duplicate sources"
+		data_sorted = data_sorted[np.concatenate(keep_inds).flatten()]
 exclusion_list = [] #List of sources to be excluded
 
 #%%
@@ -474,15 +494,28 @@ for i in range(0,len(data_sorted)):
 
 	else:
 		raise ValueError("Catalogue type is not valid")
+	overwrite = settings.overwrite #Follow global overwrite settings
 	filename=overlayloc+src+overlay_suffix
 	filename_cross=overlayloc+src+'_cross_'+overlay_suffix
+	"Special exception for sources in the duplicate file"
+	if len(settings.override_src.split("duplicate"))>1:
+		print("Handling duplicate found in the same field")
+		overwrite = False
+		if src in duplicate_sources.keys():
+			duplicate_sources[src] +=1 
+		else:
+			duplicate_sources[src] = 0
+		add_suff = f"_{duplicate_sources[src]}"
+		filename = filename.split(".png")[0]+add_suff+filename.split(".png")[-1]+".png"
+		filename_cross = filename_cross.split(".png")[0]+add_suff+filename_cross.split(".png")[-1]+".png"
 	dir_to_save= settings.radio_output.split(settings.field_ref)[0].split(settings.prefix)[-1].split("/")
 	dir_to_save =list(filter(None,dir_to_save))[0]
 	
 	# check to see if file already exists for this source
 	# aka you shouldn't be able to overwrite existing files unless you tweak this!
 	excluded_source =False #Check if the source should be excluded
-	if (os.path.isfile(filename) == False)|settings.overwrite:#|(os.path.isfile(filename) == True): #Second condition is for debugging
+
+	if (os.path.isfile(filename) == False)|overwrite:#|(os.path.isfile(filename) == True): #Second condition is for debugging
 		#print(i,src)
 		coords=SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit=u.degree)   
 
@@ -844,7 +877,7 @@ for i in range(0,len(data_sorted)):
 			print("Creating 6x6 cutout for source: {}".format(src))
 			#Create file
 			cutout_suffix = ""
-			cutout_filename =settings.cutout_dir+"SB"+settings.SB+src+cutout_suffix
+			cutout_filename =settings.cutout_dir+"SB"+settings.SB+src+cutout_suffix+add_suff
 			cutout_dir = settings.cutout_dir
 			if excluded_source:
 				"Dissect and append to the filename"
