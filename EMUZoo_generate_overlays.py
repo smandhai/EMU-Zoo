@@ -390,9 +390,14 @@ if override_src != None:
 
 	if settings.use_file:
 		#source_list = pd.read_csv(override_src,header=None)
-		source_list = np.genfromtxt(override_src,dtype=str)
-		override_src = list(source_list)
-		if len(settings.override_src[0].split("duplicate"))>1:
+		source_list = np.genfromtxt(override_src,dtype=str,delimiter=',')
+		if len(source_list.shape)>1:
+			override_src = list(source_list[0:,0])
+			src_mode = list(source_list[0:,-1])
+		else:
+			override_src = list(source_list)
+			src_mode = list(np.tile("",len(override_src)))
+		if len(settings.override_src.split("duplicate"))>1:
 			unique_srcs= True #Consider non-unique sources
 			
 	else:
@@ -413,6 +418,7 @@ if override_src != None:
 	elif cat_type=="component_new":
 		src_ind = 8
 	_,find_src,_=np.intersect1d(data_sorted[:,src_ind],override_src,assume_unique=unique_srcs,return_indices=True)
+	find_src = np.arange(len(data_sorted))[np.in1d(data_sorted[:,src_ind],override_src)]
 	if len(find_src)>0:
 		data_sorted = data_sorted[find_src]
 	else:
@@ -420,18 +426,24 @@ if override_src != None:
 	
 	"Special exception for sources in the duplicate file"
 	"Ensures that sources that are duplicated in the SAME field are accounted for only"
-	if len(settings.override_src[0].split("duplicate"))>1:
-		print("Special overwride file found... filtering out non-duplicates")
-		"Find the count of sources that exist multiple times in this field"
-		temp_srcs,temp_ind,temp_counts = np.unique(data_sorted[:,src_ind],return_index=True,return_counts=True)
-		"Find where counts are >1 (i.e. duplicates). Only keep sources with duplicates"
-		keep_srcs = data_sorted[:,src_ind][temp_ind[np.where(temp_counts>1)] ]
+
+
+	"Find the count of sources that exist multiple times in this field"
+	temp_srcs,temp_ind,temp_counts = np.unique(data_sorted[:,src_ind],return_index=True,return_counts=True)
+	"Find where counts are >1 (i.e. duplicates). Only keep sources with duplicates"
+	keep_srcs = data_sorted[:,src_ind][temp_ind[np.where(temp_counts>1)] ]
+	if len(keep_srcs)>0:
 		"Find the indices to with the catalogue to pair duplicates with"
 		keep_inds = [np.where(data_sorted[:,src_ind]==keep_srcs[i]) for i in range(len(keep_srcs))]
 		if len(keep_inds) ==0:
 			raise ValueError("No duplicates found, nothing to do...")
-		"Overwrite data_sorted to remove non-duplicate sources"
+	"Overwrite data_sorted to remove non-duplicate sources"
+	if len(settings.override_src.split("duplicate"))>1:
+		print("Special overwride file found... filtering out non-duplicates")
 		data_sorted = data_sorted[np.concatenate(keep_inds).flatten()]
+else:
+	"If no overrides are found"
+	src_mode = list(np.tile("",len(data_sorted)))
 exclusion_list = [] #List of sources to be excluded
 
 #%%
@@ -503,16 +515,34 @@ for i in range(0,len(data_sorted)):
 	filename=overlayloc+src+overlay_suffix
 	filename_cross=overlayloc+src+'_cross_'+overlay_suffix
 	"Special exception for sources in the duplicate file"
-	if len(settings.override_src[0].split("duplicate"))>1:
+	if len(settings.override_src.split("duplicate"))>1:
 		print("Handling duplicate found in the same field")
 		overwrite = False
 		if src in duplicate_sources.keys():
 			duplicate_sources[src] +=1 
 		else:
 			duplicate_sources[src] = 0
-		add_suff = f"_{duplicate_sources[src]}"
-		filename = filename.split(".png")[0]+add_suff+filename.split(".png")[-1]+".png"
-		filename_cross = filename_cross.split(".png")[0]+add_suff+filename_cross.split(".png")[-1]+".png"
+		
+		if (settings.cat_type=='island')|(settings.selavy_convention ==False):
+			add_suff = "_{}".format(duplicate_sources[src])
+		if settings.selavy_convention:
+			add_suff = data_sorted[i,src_ind-1][-1]
+		print("Source: {} [{} --> {}]".format(src,duplicate_sources[src],data_sorted[i,src_ind-1][-1]))
+	else:
+		if src in keep_srcs:
+			print("Found repeated component ID, first value = _0")
+			if src in duplicate_sources.keys():
+				duplicate_sources[src] +=1 
+			else:
+				duplicate_sources[src] = 0
+			if duplicate_sources[src] == 0:
+				add_suff = '_0'
+			print("Source: {} [{} --> {}]".format(src,duplicate_sources[src],data_sorted[i,src_ind-1][-1]))
+	#print(data_sorted[i,src_ind-1][-1])
+	if (settings.selavy_convention)&(settings.cat_type!="island"):
+		add_suff = data_sorted[i,src_ind-1][-1]
+	filename = filename.split(".png")[0]+add_suff+filename.split(".png")[-1]+".png"
+	filename_cross = filename.split(".png")[0]+'_cross_'+filename.split(".png")[-1]+".png"
 	dir_to_save= settings.radio_output.split(settings.field_ref)[0].split(settings.prefix)[-1].split("/")
 	dir_to_save =list(filter(None,dir_to_save))[0]
 	
@@ -697,7 +727,7 @@ for i in range(0,len(data_sorted)):
 				B, footprint_B = reproject_and_coadd(B_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 				
 			img=lupton_rgb.make_lupton_rgb(R,G,B,Q=10,stretch=50,minimum=1)
-	
+			"Note - SM [27/04/2024]: Some sources have partial images, these need to be flagged up."
 
 			fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi, 1024/my_dpi),dpi=my_dpi*0.55)
 			# Set figure background as white
