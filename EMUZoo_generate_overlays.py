@@ -21,7 +21,7 @@ from astroquery.skyview import SkyView
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 import glob, os, sys
-from astropy.nddata import Cutout2D
+from astropy.nddata import Cutout2D,PartialOverlapError
 import math
 import cmasher as cmr
 from astropy.visualization import lupton_rgb
@@ -438,9 +438,11 @@ if override_src != None:
 		if len(keep_inds) ==0:
 			raise ValueError("No duplicates found, nothing to do...")
 	"Overwrite data_sorted to remove non-duplicate sources"
-	if len(settings.override_src.split("duplicate"))>1:
-		print("Special overwride file found... filtering out non-duplicates")
-		data_sorted = data_sorted[np.concatenate(keep_inds).flatten()]
+	if type(settings.override_src) !=list:
+		if len(settings.override_src.split("duplicate"))>1:
+			print("Special overwride file found... filtering out non-duplicates")
+			data_sorted = data_sorted[np.concatenate(keep_inds).flatten()]
+		
 else:
 	"If no overrides are found"
 	src_mode = list(np.tile("",len(data_sorted)))
@@ -514,30 +516,32 @@ for i in range(0,len(data_sorted)):
 	overwrite = settings.overwrite #Follow global overwrite settings
 	filename=overlayloc+src+overlay_suffix
 	filename_cross=overlayloc+src+'_cross_'+overlay_suffix
+	src_coords =SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit='deg')
 	"Special exception for sources in the duplicate file"
-	if len(settings.override_src.split("duplicate"))>1:
-		print("Handling duplicate found in the same field")
-		overwrite = False
-		if src in duplicate_sources.keys():
-			duplicate_sources[src] +=1 
-		else:
-			duplicate_sources[src] = 0
-		
-		if (settings.cat_type=='island')|(settings.selavy_convention ==False):
-			add_suff = "_{}".format(duplicate_sources[src])
-		if settings.selavy_convention:
-			add_suff = data_sorted[i,src_ind-1][-1]
-		print("Source: {} [{} --> {}]".format(src,duplicate_sources[src],data_sorted[i,src_ind-1][-1]))
-	else:
-		if src in keep_srcs:
-			print("Found repeated component ID, first value = _0")
+	if (type(settings.override_src)!=list):	
+		if (len(settings.override_src.split("duplicate"))>1):
+			print("Handling duplicate found in the same field")
+			overwrite = False
 			if src in duplicate_sources.keys():
 				duplicate_sources[src] +=1 
 			else:
 				duplicate_sources[src] = 0
-			if duplicate_sources[src] == 0:
-				add_suff = '_0'
+			
+			if (settings.cat_type=='island')|(settings.selavy_convention ==False):
+				add_suff = "_{}".format(duplicate_sources[src])
+			if settings.selavy_convention:
+				add_suff = data_sorted[i,src_ind-1][-1]
 			print("Source: {} [{} --> {}]".format(src,duplicate_sources[src],data_sorted[i,src_ind-1][-1]))
+		else:
+			if src in keep_srcs:
+				print("Found repeated component ID, first value = _0")
+				if src in duplicate_sources.keys():
+					duplicate_sources[src] +=1 
+				else:
+					duplicate_sources[src] = 0
+				if duplicate_sources[src] == 0:
+					add_suff = '_0'
+				print("Source: {} [{} --> {}]".format(src,duplicate_sources[src],data_sorted[i,src_ind-1][-1]))
 	#print(data_sorted[i,src_ind-1][-1])
 	if (settings.selavy_convention)&(settings.cat_type!="island"):
 		add_suff = data_sorted[i,src_ind-1][-1]
@@ -637,7 +641,7 @@ for i in range(0,len(data_sorted)):
 		#		Create smaller masking window to filter bright sources 
 		# =============================================================================
 		radio_cutout_tiny = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge/6*2), wcs=wcs, mode='trim')
-		if np.isnan(np.asarray(radio_cutout_tiny.data).min()):
+		if np.isnan(np.asarray(radio_cutout.data).min()):
 			excluded_source=True
 			warnings.warn("Invalid values found... source is likely on the edge of the detector image")
 		else:
@@ -663,7 +667,7 @@ for i in range(0,len(data_sorted)):
 			filename_cross =filename.split(".")[0] +"_cross_"+filename.split(".")[-1] 
 			exclusion_list.append(src)
 			excluded_source = True
-			if (os.path.isfile(filename) == True):
+			if (os.path.isfile(filename) == True)&(overwrite==False):
 				"If the file exists, proceed"
 				continue
 		# radio_cutout.data  = radio_cutout_contours
@@ -672,7 +676,6 @@ for i in range(0,len(data_sorted)):
 		for c in range(0,nconts+1):
 			"Gradually shift the colourmap incrementally based on contour level"
 			contcolors.append(greycmap(0.5+(0.5*c/(nconts+1))))  
-
 
 		R_list=[]
 		G_list=[]
@@ -683,10 +686,17 @@ for i in range(0,len(data_sorted)):
 			for j in range(0,len(DES_tiles_to_use[0])):
 				#for j in ind:
 				try:
+					print("Loading Rhdu")
 					Rhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_i.fits*')[0])
 				except IndexError:
 					raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
 					break
+				except FileNotFoundError:
+					raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+					break
+				except:
+					print("Something has gone wrong with the DES tiles...")
+					continue
 				R=Rhdu[1].data
 				des_wcs=WCS(Rhdu[1].header)
 				Rhdu.close()
@@ -698,11 +708,24 @@ for i in range(0,len(data_sorted)):
 				Bhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_g.fits*')[0])
 				B=Bhdu[1].data
 				Bhdu.close()
-	
 				R_cutout=Cutout2D(R,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
 				G_cutout=Cutout2D(G,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
 				B_cutout=Cutout2D(B,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
-	
+				"""Note -SM [30/04/2024]: The commented out exception does work but it also filters out viable sources"""
+# 				try:
+# 					R_cutout=Cutout2D(R,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='strict')
+# 					G_cutout=Cutout2D(G,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='strict')
+# 					B_cutout=Cutout2D(B,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='strict')
+# 				except PartialOverlapError:
+# 					print("Partial coverage")
+# 					if excluded_source ==False:
+# 						filename=  filename.split(dir_to_save)[0]+settings.exclusion_dir.split(settings.prefix)[-1]+filename.split(dir_to_save)[1]
+# 						filename_cross =filename.split(".")[0] +"_cross_"+filename.split(".")[-1] 
+# 						exclusion_list.append(src)
+# 					excluded_source = True
+# 					R_cutout=Cutout2D(R,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
+# 					G_cutout=Cutout2D(G,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
+# 					B_cutout=Cutout2D(B,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
 				R_hdu=fits.PrimaryHDU(data=R_cutout.data, header=R_cutout.wcs.to_header())
 				G_hdu=fits.PrimaryHDU(data=G_cutout.data, header=G_cutout.wcs.to_header())
 				B_hdu=fits.PrimaryHDU(data=B_cutout.data, header=B_cutout.wcs.to_header())
@@ -713,6 +736,9 @@ for i in range(0,len(data_sorted)):
 	
 			if len(R_list)==0:
 				print("something wrong")
+				if len(DES_tiles_to_use)==1:
+					print("No DES Images found")
+					continue
 			elif len(R_list)==0:
 				#only one image so no need to mosaic
 				R=R_list[0].data
@@ -761,15 +787,28 @@ for i in range(0,len(data_sorted)):
 				wise_list=[]
 				for k in range(0,len(wise_tiles_to_use[0])):
 					#get wise cutout 
+					download_wise= False#Should wise images be downloaded
 					wise_im=settings.WISEfiles_dir.split("*")[0]+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
-					wise_hdu=fits.open(wise_im)
+					if os.path.isfile(wise_im)==False:
+						print("WISE Tile not found... moving on")
+						try:
+							print("Attempting to download WISE image")
+							#wise_im = SkyView.get_images(src_coords,survey=["WISE 3.4"],coordinates='J2000',radius=12*u.arcmin)
+							download_wise =  True
+						except:
+							print("Issue encountered... moving on")
+							continue
+					if download_wise==False:
+						wise_hdu=fits.open(wise_im)
+					else:
+						wise_hdu= SkyView.get_images(src_coords,survey=["WISE 3.4"],coordinates='J2000',radius=12*u.arcmin)[0]
+					
 					wise_data= wise_hdu[0].data
 					wise_wcs= WCS(wise_hdu[0].header)
 					wise_hdu.close()
 					wise_cutout=Cutout2D(wise_data,position=coords,size=1.05*arcmins*u.arcmin,wcs=wise_wcs,mode='trim')
 					wise_hdu=fits.PrimaryHDU(data=wise_cutout.data, header=wise_cutout.wcs.to_header())			   
 					wise_list.append(wise_hdu)
-	
 				if len(wise_list)==0:
 					print("something wrong")
 				elif len(wise_list)==1:
@@ -777,6 +816,8 @@ for i in range(0,len(data_sorted)):
 					#only one image so no need to mosaic
 					wise_data=wise_list[0].data
 					wise_wcs=WCS(wise_list[0].header)
+					print("Skipping source: {}".format(src))
+					continue
 	
 				else:
 					print("combining wise")
@@ -796,6 +837,9 @@ for i in range(0,len(data_sorted)):
 				for k in range(0,len(wise_tiles_to_use[0])):
 					#get wise cutout 
 					wise_im=settings.WISEfiles_dir.split("*")[0]+str(wise_tiles_to_use[0][k])+'-w1-int-3.fits'
+					if os.path.isfile(wise_im)==False:
+						print("WISE Tile not found... moving on")
+						continue
 					wise_hdu=fits.open(wise_im)
 					wise_data= wise_hdu[0].data
 					wise_wcs= WCS(wise_hdu[0].header)
@@ -803,6 +847,9 @@ for i in range(0,len(data_sorted)):
 					ax7.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax7.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
 					ax8.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax8.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
 					ax9.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax9.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
+# 			except FileNotFoundError:
+# 				print("WISE Tiles not found... moving on")
+# 				continue
 	
 			ax7.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
 			ax8.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
@@ -849,8 +896,11 @@ for i in range(0,len(data_sorted)):
 			plt.annotate('Default',xy=(0.55,0.91),xycoords='figure fraction',ha='center')
 			plt.annotate('Zoomed out',xy=(0.85,0.91),xycoords='figure fraction',ha='center')
 			plt.subplots_adjust(left=0.1, bottom=0.01, right=0.99, top=0.9, hspace=0,wspace=0.02) # control space between figure and whitespace
-	
-			plt.savefig(filename)
+			try:
+				plt.savefig(filename)
+			except:
+				print("Something went wrong when saving source figure: {}".format(src))
+				continue
 			
 			xp,yp=utils.skycoord_to_pixel(coords,radio_cutout.wcs)
 	
