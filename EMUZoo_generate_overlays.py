@@ -664,7 +664,7 @@ for i in range(0,len(data_sorted)):
 		if (len(np.where(radio_cutout_window>0)[1]) ==0)|(excluded_source==True):
 			"Reset filename to exclude source and place it in another directory"
 			filename=  filename.split(dir_to_save)[0]+settings.exclusion_dir.split(settings.prefix)[-1]+filename.split(dir_to_save)[1]
-			filename_cross =filename.split(".")[0] +"_cross_"+filename.split(".")[-1] 
+			filename_cross =filename.split(".")[0] +"_cross_"+".png"#filename.split(".png")[-1] 
 			exclusion_list.append(src)
 			excluded_source = True
 			if (os.path.isfile(filename) == True)&(overwrite==False):
