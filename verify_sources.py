@@ -12,12 +12,14 @@ import numpy as np
 import settings
 import glob
 import functools as ft
+import shutil as sh
+import utils as ut
+import os
+from astropy.io import ascii
 
-def extract_srcs(string,split_by='J',add_prefix='',ind=-1):
-	string = add_prefix+string.split(split_by)[ind]
-	return string
-def add_strings(arr1,arr2):
-	return arr1+arr2	
+#%%
+"Completed Fields"
+comp_fields= ["9287","9351","9434","9437","9442"]
 #%%
 root_dir = settings.prefix  
 chosen_sources = "/complexity_sources/subject_list_PhaseI_RGZ-EMU_cpx_ab4000_majax_ab20.csv"
@@ -38,19 +40,20 @@ name_colind = np.where(complexity_data_headers==name_colname)[0][0]
 id_colname= "component_id"
 id_colind = np.where(complexity_data_headers==id_colname)[0][0]
 "Add strings together into a single list"
-complexity_name = list(map(add_strings,complexity_data.T[name_colind],complexity_data.T[suffix_colind]))
-complex_id = list(map(ft.partial(extract_srcs,split_by='_',add_prefix='',ind=0),complexity_data.T[id_colind]))
-complexity_name = list(map(add_strings,complex_id,complexity_name))
+complexity_name = list(map(ut.add_strings,complexity_data.T[name_colind],complexity_data.T[suffix_colind]))
+complex_id = list(map(ft.partial(ut.extract_srcs,split_by='_',add_prefix='',ind=0),complexity_data.T[id_colind]))
+complexity_name = list(map(ut.add_strings,complex_id,complexity_name))
 
 
 "Data"
 chosen_data= np.loadtxt(root_dir+chosen_sources,dtype=str,delimiter=',',skiprows=0)
 
 image_dir = glob.glob(image_dir+'/*')
+image_dir_all = image_dir
 
 "ID's of all the imagse"
-image_srcs= list(map(ft.partial(extract_srcs,split_by='SB',add_prefix='SB'),image_dir))
-image_srcs_clean= list(map(ft.partial(extract_srcs,split_by='_cross_',add_prefix='',ind=0),image_srcs))
+image_srcs= list(map(ft.partial(ut.extract_srcs,split_by='SB',add_prefix='SB'),image_dir))
+image_srcs_clean= list(map(ft.partial(ut.extract_srcs,split_by='_cross_',add_prefix='',ind=0),image_srcs))
 
 "Cross-match image dir sources with complexity sources"
 comp_images_match,comp_match_inds,img_match_inds = np.intersect1d(complexity_name,image_srcs_clean,return_indices=True)
@@ -59,6 +62,7 @@ sorting = np.argsort(comp_match_inds)
 comp_images_match = comp_images_match[sorting]
 comp_match_inds = comp_match_inds[sorting]
 img_match_inds = img_match_inds[sorting]
+
 "Missing images - For debugging"
 missing_img_ind = np.in1d(np.arange(len(image_srcs_clean)),img_match_inds,invert=True)
 missing_imgs = np.asarray(image_srcs_clean)[missing_img_ind]
@@ -78,8 +82,37 @@ comp_match_inds = comp_match_inds[sorting]
 img_match_inds = img_match_inds[sorting]
 complexities_match = complexities_match[sorting]
 
+"Reorder images"
+image_srcs_clean = np.asarray(image_srcs_clean)[img_match_inds]
+
 "Image dirs reordered"
 image_dir = np.asarray(image_dir)[img_match_inds]
   
 #%%
 "Apply image cut, remove sources that are unneeded"
+select_sources = 3150
+complexity_cut=4000
+image_dir_cut = image_dir[complexities_match>=complexity_cut]
+#%%
+"Only keep sources with complete fields"
+image_keep_cond = np.tile(False,len(image_dir_cut))
+
+for field in comp_fields:
+	temp_cond = list(map(ft.partial(ut.in_string,value='SB{}'.format(field)),image_dir_cut))
+	image_keep_cond[np.where(np.asarray(temp_cond)==True)]=True
+image_dir_cut = image_dir_cut[image_keep_cond]
+#%%
+"Delete unneeded sources"
+count = 0
+for image in image_dir_all:
+	if image not in image_dir_cut:
+		#print("Deleting Image: {}".format(image))
+		os.remove(image)
+		count+=1
+		
+print(f"Number of files deleted: {count}")
+
+#%%
+"Store remaining outputs to a folder"
+meta_data = complexity_data[comp_match_inds]
+ascii.write(meta_data,"metadata.csv",overwrite=True,delimiter=',',names=complexity_data_headers)
