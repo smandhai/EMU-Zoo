@@ -37,6 +37,7 @@ from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 from importlib import reload
 import warnings
+import h5py
 reload(settings)
 #%%
 #-----------------------------------------------------------
@@ -47,6 +48,24 @@ def ashinh_scale(array,zeropoint=0,scale=1):
 def percentile(array,percent):
 	val=np.percentile(array[np.isfinite(array)],percent)
 	return val
+
+def save_contours(contour,fname='source.h5',ppa=30,coords=(0,0),x_size=360,y_size=360): 
+	"IN PROGRESS, TO BE COMPLETED"
+	"Takes contour values and saves all contour levels to a h5 file"
+	cs = contour
+	with h5py.File(fname,'w') as f: #Open File
+		f.attrs["pixels_per_arcmin"] = ppa #pixel per arcmin translation
+		f.attrs["ra_cen"] = "{:.5f}".format(float(coords[0])) #central coordinate, (0,0) means unspecified coordinates.
+		f.attrs["dec_cen"] = "{:.5f}".format(float(coords[1]))
+		f.attrs["x_px_size"] = x_size
+		f.attrs["y_px_size"] = y_size
+		for i in range(len(cs.allsegs)):
+			cs_cond = np.where(np.asarray(list(map(ft.partial(point_check,coord=(x_size/2,y_size/2)),cs.allsegs[i]))).astype(bool)==True)
+			if len(cs_cond[0])>0:
+				#print(i)
+				cs_cond = cs_cond[0][0]
+				f["Level_{}".format(i)] = cs.allsegs[i][cs_cond]
+	return
 
 def point_check(contour,coord=(0,0),search_pix = 5):
 	"Checks if a point exists within the contour"
@@ -84,7 +103,7 @@ def point_check(contour,coord=(0,0),search_pix = 5):
 # 			return exists
 	return exists
 def masking(data,contours,mask_value=0,ppa=30,exclude=True,pixel_thresh=1):
-	global cs
+	#global cs
 	excluded_source=False
 	x_size,y_size= data.shape
 	pixels_per_arcmin = ppa
@@ -301,7 +320,8 @@ deg_edge=arcmins*0.025/3.
 # note that many of these are no longer used but kept for posterity
 
 dpi=300
-my_dpi = 100
+dpi_save = 300
+my_dpi = 100#300
 sub_font_size = 10
 plt.rc('font', size=0.5)  
 plt.rcParams.update({'lines.linewidth':0.8})
@@ -383,7 +403,22 @@ ut.make_dir(settings.radio_output.split(settings.field_ref)[0]) #Create output d
 ut.make_dir(settings.exclusion_dir) # Create exclusion directory
 
 #MAIN BIT
+src_ind = 0
+if cat_type=="island":
+	src_ind = 6
+	#_,find_src,_=np.intersect1d(data_sorted[:,6],override_src,assume_unique=True,return_indices=True)
+	#find_src = np.where(np.asarray(data_sorted[:,6]).astype(str)==override_src)
+elif cat_type=="catwise":
+	src_ind = 2
+	#_,find_src,_=np.intersect1d(data_sorted[:,2],override_src,assume_unique=True,return_indices=True)
+elif cat_type=="component":
+	src_ind = 7
+	#_,find_src,_=np.intersect1d(data_sorted[:,7],override_src,assume_unique=True,return_indices=True)
+	#find_src = np.where(np.asarray(data_sorted[:,7]).astype(str)==override_src)
+elif cat_type=="component_new":
+	src_ind = 8
 
+add_suff= "" #Intialise suffix
 #Override Source
 if override_src != None:
 	unique_srcs = False #Assume Unique srcs, by default every source is assumed to be unique
@@ -403,20 +438,6 @@ if override_src != None:
 	else:
 		if type(override_src) == str: #Convert single source name to a list
 			override_src = [override_src]
-	src_ind = 0
-	if cat_type=="island":
-		src_ind = 6
-		#_,find_src,_=np.intersect1d(data_sorted[:,6],override_src,assume_unique=True,return_indices=True)
-		#find_src = np.where(np.asarray(data_sorted[:,6]).astype(str)==override_src)
-	elif cat_type=="catwise":
-		src_ind = 2
-		#_,find_src,_=np.intersect1d(data_sorted[:,2],override_src,assume_unique=True,return_indices=True)
-	elif cat_type=="component":
-		src_ind = 7
-		#_,find_src,_=np.intersect1d(data_sorted[:,7],override_src,assume_unique=True,return_indices=True)
-		#find_src = np.where(np.asarray(data_sorted[:,7]).astype(str)==override_src)
-	elif cat_type=="component_new":
-		src_ind = 8
 	_,find_src,_=np.intersect1d(data_sorted[:,src_ind],override_src,assume_unique=unique_srcs,return_indices=True)
 	find_src = np.arange(len(data_sorted))[np.in1d(data_sorted[:,src_ind],override_src)]
 	if len(find_src)>0:
@@ -438,8 +459,10 @@ if override_src != None:
 		if len(keep_inds) ==0:
 			raise ValueError("No duplicates found, nothing to do...")
 	"Overwrite data_sorted to remove non-duplicate sources"
-	if type(settings.override_src) !=list:
-		if len(settings.override_src.split("duplicate"))>1:
+	if override_src ==  None:	
+		override_src = ""
+	if type(override_src) !=list:
+		if len(override_src.split("duplicate"))>1:
 			print("Special overwride file found... filtering out non-duplicates")
 			data_sorted = data_sorted[np.concatenate(keep_inds).flatten()]
 		
@@ -518,7 +541,7 @@ for i in range(0,len(data_sorted)):
 	filename_cross=overlayloc+src+'_cross_'+overlay_suffix
 	src_coords =SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit='deg')
 	"Special exception for sources in the duplicate file"
-	if (type(settings.override_src)!=list):	
+	if (type(settings.override_src)!=list)&(settings.override_src!=None):	
 		if (len(settings.override_src.split("duplicate"))>1):
 			print("Handling duplicate found in the same field")
 			overwrite = False
@@ -637,11 +660,21 @@ for i in range(0,len(data_sorted)):
 		selection_window_y = (int(y_size/2 - pixels_per_arcmin),int(y_size/2 + pixels_per_arcmin))
 		radio_cutout_window = radio_cutout_contours[selection_window_x[0]:selection_window_x[1],
 							selection_window_y[0]:selection_window_y[1]]
+		# =============================================================================
+		# 	Contour extraction	
+		# =============================================================================
+		if settings.extract_contours:
+			"Create contour"
+			ext_conts = plt.contour(radio_cutout.data,levels=radio_contours,colors='grey')
+			if os.path.isdir(settings.extract_contours_dir)==False:
+				os.mkdir(settings.extract_contours_dir)
+			save_contours(ext_conts, fname = settings.extract_contours_dir+"SB"+filename.split("SB")[-1].split(".png")[0]+".h5",coords=(ra_deg_cont,dec_deg_cont)
+				 ,x_size= x_size,y_size=y_size)
 #%%	 # =============================================================================
 		#		Create smaller masking window to filter bright sources 
 		# =============================================================================
-		radio_cutout_tiny = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge/6*2), wcs=wcs, mode='trim')
-		if np.isnan(np.asarray(radio_cutout.data).min()):
+		radio_cutout_tiny = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge/6*2), wcs=wcs, mode='trim') #Creats a 2x2' cutout
+		if np.isnan(np.asarray(radio_cutout_tiny.data).min()):
 			excluded_source=True
 			warnings.warn("Invalid values found... source is likely on the edge of the detector image")
 		else:
@@ -689,11 +722,15 @@ for i in range(0,len(data_sorted)):
 					print("Loading Rhdu")
 					Rhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_i.fits*')[0])
 				except IndexError:
-					raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
-					break
+					#raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+					print("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+					continue
+					#break
 				except FileNotFoundError:
-					raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
-					break
+					#raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+					print("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+					continue
+					#break
 				except:
 					print("Something has gone wrong with the DES tiles...")
 					continue
@@ -738,7 +775,14 @@ for i in range(0,len(data_sorted)):
 				print("something wrong")
 				if len(DES_tiles_to_use)==1:
 					print("No DES Images found")
-					continue
+					R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
+					G_hdu= SkyView.get_images(src_coords,survey=["DSS"],coordinates='J2000',radius=12*u.arcmin)[0]
+					B_hdu= SkyView.get_images(src_coords,survey=["DSS2 Blue"],coordinates='J2000',radius=12*u.arcmin)[0]
+					R=R_hdu[0].data
+					G=G_hdu[0].data
+					B=B_hdu[0].data
+					des_wcs=WCS(R_hdu[0].header)
+					#continue
 			elif len(R_list)==0:
 				#only one image so no need to mosaic
 				R=R_list[0].data
@@ -755,7 +799,7 @@ for i in range(0,len(data_sorted)):
 			img=lupton_rgb.make_lupton_rgb(R,G,B,Q=10,stretch=50,minimum=1)
 			"Note - SM [27/04/2024]: Some sources have partial images, these need to be flagged up."
 
-			fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi, 1024/my_dpi),dpi=my_dpi*0.55)
+			fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi, 1024/my_dpi),dpi=my_dpi)#*0.55)# <- Uncomment this if you want to downscale the images
 			# Set figure background as white
 			fig.patch.set_facecolor('w')		
 	
@@ -801,8 +845,10 @@ for i in range(0,len(data_sorted)):
 					if download_wise==False:
 						wise_hdu=fits.open(wise_im)
 					else:
+						#radio_coords =SkyCoord(radio_cutout.wcs.wcs.crval[0],radio_cutout.wcs.wcs.crval[1],frame='fk5',unit='deg')
+						#wise_hdu= SkyView.get_images(radio_coords,survey=["WISE 3.4"],coordinates='J2000',radius=12*u.arcmin)[0]
 						wise_hdu= SkyView.get_images(src_coords,survey=["WISE 3.4"],coordinates='J2000',radius=12*u.arcmin)[0]
-					
+										
 					wise_data= wise_hdu[0].data
 					wise_wcs= WCS(wise_hdu[0].header)
 					wise_hdu.close()
@@ -816,8 +862,8 @@ for i in range(0,len(data_sorted)):
 					#only one image so no need to mosaic
 					wise_data=wise_list[0].data
 					wise_wcs=WCS(wise_list[0].header)
-					print("Skipping source: {}".format(src))
-					continue
+					#print("Skipping source: {}".format(src))
+					#continue
 	
 				else:
 					print("combining wise")
@@ -897,7 +943,8 @@ for i in range(0,len(data_sorted)):
 			plt.annotate('Zoomed out',xy=(0.85,0.91),xycoords='figure fraction',ha='center')
 			plt.subplots_adjust(left=0.1, bottom=0.01, right=0.99, top=0.9, hspace=0,wspace=0.02) # control space between figure and whitespace
 			try:
-				plt.savefig(filename)
+				plt.savefig(filename,dpi=my_dpi)
+				#plt.savefig(filename.split("png")[0]+"svg",dpi=my_dpi)
 			except:
 				print("Something went wrong when saving source figure: {}".format(src))
 				continue
@@ -951,7 +998,8 @@ for i in range(0,len(data_sorted)):
 			ax9.axvline(x=xp,ymin=0,ymax=0.45,c='w',linestyle=':')
 			ax9.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
 	
-			plt.savefig(filename_cross)
+			plt.savefig(filename_cross,dpi=my_dpi)
+			#plt.savefig(filename_cross.split("png")[0]+"svg",dpi=my_dpi)
 			plt.show()
 			plt.close()
 #%%
@@ -970,7 +1018,8 @@ for i in range(0,len(data_sorted)):
 				cutout_dir=  cutout_filename.split(settings.field_ref)[0]
 			ut.make_dir(cutout_dir) #Checks if directory already exists
 			if settings.export_fits_cutout:
-				radio_cutout_small = Cutout2D(image, position=(x_cen,y_cen), size=(npix_edge), wcs=wcs, mode='trim')
+				scale_override= 1 #Should be 1 unless testing
+				radio_cutout_small = Cutout2D(image, position=(x_cen,y_cen), size=(scale_override*npix_edge), wcs=wcs, mode='trim')
 				hdu[0].data = radio_cutout_small.data
 				hdu[0].header.update(radio_cutout_small.wcs.to_header())
 				hdu.writeto(cutout_filename+".fits", overwrite=True)
@@ -993,6 +1042,7 @@ for i in range(0,len(data_sorted)):
 					ax.axvline(x=xp,ymin=0.55,ymax=1,c='w',linestyle=':')
 				plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
 				plt.savefig(cutout_filename+".png",pad_inches=0)
+				#plt.savefig(cutout_filename.split("png")[0]+"svg",dpi=my_dpi)
 				plt.close(fig)
 
 hdu.close()   #Close radio fits file
