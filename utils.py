@@ -10,6 +10,16 @@ Utilities to conduct basic operations
 import os
 import shutil as sh
 
+def in_string(string_list,value=""):
+	present = value in string_list
+	return present
+
+def extract_srcs(string,split_by='J',add_prefix='',ind=-1):
+	string = add_prefix+string.split(split_by)[ind]
+	return string
+def add_strings(arr1,arr2):
+	return arr1+arr2	
+
 def to_abc(num):
 	"Only works for two letters"
 	reps = int(num/27)

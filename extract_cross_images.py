@@ -25,8 +25,8 @@ def copy_item(old_dir,new_dir):
 	new_dir += "\\"+itm
 	sh.copy(old_dir,new_dir)
 
-file_dir = settings.prefix+"/phase1_rel/phase1_rel_radio_cutouts/"
-new_dir = settings.prefix+"/phase1_rel/phase1_3150"
+file_dir = settings.prefix+"/phase_1b_hr_rel/phase1b_for_release/"
+new_dir = settings.prefix+"/phase_1b_hr_rel/final_release"
 
 file_list = glob.glob(file_dir+"*")
 

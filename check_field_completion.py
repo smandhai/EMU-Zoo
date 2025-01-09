@@ -13,8 +13,8 @@ import functools as ft
 import utils as ut
 
 
-img_store = {"exclude":settings.prefix+"phase_1_hr_rel_v2/phase1_rel_hr_excluded_radio_cutouts/*",
-			 "include":settings.prefix+"phase_1_hr_rel_v2/phase1_rel_hr_radio_cutouts/*" }
+img_store = {"exclude":settings.prefix+"phase_1b_hr_rel/phase1b_rel_hr_excluded_radio_cutouts/*",
+			 "include":settings.prefix+"phase_1b_hr_rel/phase1b_rel_hr_radio_cutouts/*" }
 
 input_list = "..\sample_data\des\complexity_sources\subject_list_PhaseI_RGZ-EMU_cpx_ab4000_majax_ab20.csv"
 

@@ -21,7 +21,7 @@ def return_bbox(tile_fname):
 		ra_max = hdr["RAC1"]
 		dec_max = hdr["DECC4"] 
 		dec_min = hdr["DECC2"] 
-		return tile_id, ra_max,ra_min,dec_max,dec_min
+		return tile_id, ra_min,ra_max,dec_max,dec_min
 	
 des_dir = "/mnt/shared/des/DES_Tiles_new"
 tiles = glob.glob(des_dir + "/*_i.fits.fz")

@@ -19,12 +19,12 @@ from astropy.io import ascii
 
 #%%
 "Completed Fields"
-comp_fields= ["9287","9351","9434","9437","9442"]
+comp_fields= ["9287","9351","9434","9442"]
 #%%
 root_dir = settings.prefix  
 chosen_sources = "/complexity_sources/subject_list_PhaseI_RGZ-EMU_cpx_ab4000_majax_ab20.csv"
 complexity_cat = "/complexity_sources/merged_10selavy_Gary_complexity.csv"
-image_dir = settings.prefix+"/phase1_rel/phase1_3150"
+image_dir = settings.prefix+"/phase_1_hr_rel_v2/final_selection"
 
 "Extract component ID"
 complexity_data = np.loadtxt(root_dir+complexity_cat,dtype=str,delimiter=',',skiprows=0)
@@ -110,7 +110,7 @@ for image in image_dir_all:
 		os.remove(image)
 		count+=1
 		
-print(f"Number of files deleted: {count}")
+print(f"Number of files deleted: {count}. Please rerun for new metadata.")
 
 #%%
 "Store remaining outputs to a folder"
