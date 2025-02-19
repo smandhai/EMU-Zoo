@@ -24,7 +24,7 @@ SB_dic = {
          "10635":"108"
          }
 
-SB="10635"#9351"#'9442'
+SB="9325"#9351"#'9442'
 component_number = SB_dic[SB]#"78"#86
 cat_type="component_new"#"component_new"#"island"#True#True
 # =============================================================================
@@ -69,6 +69,8 @@ override_src = ["J203954-503625"]
 override_src = ["J203948-500114"]
 override_src=["J214008-514841"]
 override_src= ["J221738-521627"] #Broken Wise source
+override_src = ["J220433-523240"]
+override_src=["J201302-623249"]
 #override_src= ["J222549-513937"]
 #override_src = prefix+'beta_test_subject_ids.txt'
 #override_src = None
