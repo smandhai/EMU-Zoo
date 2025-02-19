@@ -60,6 +60,8 @@ def save_contours(contour,fname='source.h5',ppa=30,coords=(0,0),x_size=360,y_siz
 		f.attrs["x_px_size"] = x_size
 		f.attrs["y_px_size"] = y_size
 		for i in range(len(cs.allsegs)):
+# 			if len(cs.allsegs[i])<3:
+# 				print(i)
 			cs_cond = np.where(np.asarray(list(map(ft.partial(point_check,coord=(x_size/2,y_size/2)),cs.allsegs[i]))).astype(bool)==True)
 			if len(cs_cond[0])>0:
 				#print(i)
@@ -287,7 +289,7 @@ WISEfiles=glob.glob(settings.WISEfiles_dir) #WISE raw data tiles location
 duplicate_sources = {} #A dictionary containing duplicate sources
 SB= settings.SB#'9351'
 add_suff= "" #Initialise extra suffix in case it needs to be added
-
+dss = False #DSS not used by default
 #hard coded image names due to inconsistent naming conventions but could be streamlined
 image='image.i.SB'+SB+'.cont.taylor.0.restored.fits'
 
@@ -665,7 +667,12 @@ for i in range(0,len(data_sorted)):
 		# =============================================================================
 		if settings.extract_contours:
 			"Create contour"
-			ext_conts = plt.contour(radio_cutout.data,levels=radio_contours,colors='grey')
+			radio_cutout_ext = np.array(radio_cutout.data) #Create duplicate array for extraction
+			radio_cutout_ext[0:,0] = 0 #Set the left boundary to 0
+			radio_cutout_ext[0:,-1] = 0#Set the right boundary to 0
+			radio_cutout_ext[0,0:] = 0#Set the upper boundary to 0
+			radio_cutout_ext[-1,0:] = 0#Set the bottom boundary to 0
+			ext_conts = plt.contour(radio_cutout_ext,levels=radio_contours,colors='grey')
 			if os.path.isdir(settings.extract_contours_dir)==False:
 				os.mkdir(settings.extract_contours_dir)
 			save_contours(ext_conts, fname = settings.extract_contours_dir+"SB"+filename.split("SB")[-1].split(".png")[0]+".h5",coords=(ra_deg_cont,dec_deg_cont)
@@ -774,13 +781,14 @@ for i in range(0,len(data_sorted)):
 			if len(R_list)==0:
 				print("something wrong")
 				if len(DES_tiles_to_use)==1:
-					print("No DES Images found")
+					dss= True
+					print("No DES Images found, using DSS2 instead...")
 					R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
 					G_hdu= SkyView.get_images(src_coords,survey=["DSS"],coordinates='J2000',radius=12*u.arcmin)[0]
 					B_hdu= SkyView.get_images(src_coords,survey=["DSS2 Blue"],coordinates='J2000',radius=12*u.arcmin)[0]
-					R=R_hdu[0].data
-					G=G_hdu[0].data
-					B=B_hdu[0].data
+					R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
+					G=np.zeros_like(R)#No G band present in DSS#G_hdu[0].data
+					B=B_hdu[0].data- np.quantile(B_hdu[0].data,0.5)
 					des_wcs=WCS(R_hdu[0].header)
 					#continue
 			elif len(R_list)==0:
@@ -797,6 +805,8 @@ for i in range(0,len(data_sorted)):
 				B, footprint_B = reproject_and_coadd(B_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 				
 			img=lupton_rgb.make_lupton_rgb(R,G,B,Q=10,stretch=50,minimum=1)
+			if dss:
+				img = R
 			"Note - SM [27/04/2024]: Some sources have partial images, these need to be flagged up."
 
 			fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi, 1024/my_dpi),dpi=my_dpi)#*0.55)# <- Uncomment this if you want to downscale the images
@@ -819,10 +829,14 @@ for i in range(0,len(data_sorted)):
 			ax2.contour(radio_cutout.data,levels=radio_contours,colors='grey')
 			ax3.imshow(radio_cutout.data,origin='lower',cmap=magmacmap,norm=colors.LogNorm(vmin=basecont/5, vmax=radio_max))
 			ax3.contour(radio_cutout.data,levels=radio_contours,colors='grey')
-	
-			ax4.imshow(img,transform=ax4.get_transform(des_wcs),origin='lower') 
-			ax5.imshow(img,transform=ax5.get_transform(des_wcs),origin='lower') 
-			ax6.imshow(img,transform=ax6.get_transform(des_wcs),origin='lower')
+			if dss ==False: #If DSS is not used, plot the DES image
+				ax4.imshow(img,transform=ax4.get_transform(des_wcs),origin='lower') 
+				ax5.imshow(img,transform=ax5.get_transform(des_wcs),origin='lower') 
+				ax6.imshow(img,transform=ax6.get_transform(des_wcs),origin='lower')
+			else:
+				ax4.imshow(img,transform=ax4.get_transform(des_wcs),origin='lower')#,cmap=plt.cm.binary) 
+				ax5.imshow(img,transform=ax5.get_transform(des_wcs),origin='lower')#,cmap=plt.cm.binary) 
+				ax6.imshow(img,transform=ax6.get_transform(des_wcs),origin='lower')#,cmap=plt.cm.binary)
 			ax4.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
 			ax5.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
 			ax6.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
