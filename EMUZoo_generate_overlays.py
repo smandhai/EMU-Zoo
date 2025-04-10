@@ -37,8 +37,11 @@ from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 from importlib import reload
 import warnings
+from astropy.wcs import FITSFixedWarning
 import h5py
 reload(settings)
+
+warnings.simplefilter("ignore",category=FITSFixedWarning)
 #%%
 #-----------------------------------------------------------
 def ashinh_scale(array,zeropoint=0,scale=1):
@@ -580,7 +583,7 @@ for i in range(0,len(data_sorted)):
 	excluded_source =False #Check if the source should be excluded
 
 	if (os.path.isfile(filename) == False)|overwrite:#|(os.path.isfile(filename) == True): #Second condition is for debugging
-		#print(i,src)
+		print(i,SB,src)
 		coords=SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit=u.degree)   
 
 		ra_max=float((coords.ra/u.degree)+deg_edge) 
@@ -731,30 +734,38 @@ for i in range(0,len(data_sorted)):
 				except IndexError:
 					#raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
 					print("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+					dss=True
 					continue
 					#break
 				except FileNotFoundError:
 					#raise IOError("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
 					print("DES File not found...{}".format(DES_tiles_to_use[0][j]+'*_i.fits*'))
+					dss=True
 					continue
 					#break
 				except:
 					print("Something has gone wrong with the DES tiles...")
+					dss=True
 					continue
+				finally:
+					print("Continuing to next step...\n")
+# 				print(1)
 				R=Rhdu[1].data
 				des_wcs=WCS(Rhdu[1].header)
 				Rhdu.close()
-	
+# 				quit()
+# 				print(2)
 				Ghdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_r.fits*')[0])
 				G=Ghdu[1].data
 				Ghdu.close()
-	
+# 				print(3)
 				Bhdu=fits.open(glob.glob(settings.DESfiles_dir.split("*")[0]+DES_tiles_to_use[0][j]+'*_g.fits*')[0])
 				B=Bhdu[1].data
 				Bhdu.close()
 				R_cutout=Cutout2D(R,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
 				G_cutout=Cutout2D(G,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
 				B_cutout=Cutout2D(B,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
+# 				print(4)
 				"""Note -SM [30/04/2024]: The commented out exception does work but it also filters out viable sources"""
 # 				try:
 # 					R_cutout=Cutout2D(R,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='strict')
@@ -770,40 +781,48 @@ for i in range(0,len(data_sorted)):
 # 					R_cutout=Cutout2D(R,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
 # 					G_cutout=Cutout2D(G,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
 # 					B_cutout=Cutout2D(B,position=coords,size=1.05*arcmins*u.arcmin,wcs=des_wcs,mode='trim')
+# 				print(5)
 				R_hdu=fits.PrimaryHDU(data=R_cutout.data, header=R_cutout.wcs.to_header())
 				G_hdu=fits.PrimaryHDU(data=G_cutout.data, header=G_cutout.wcs.to_header())
 				B_hdu=fits.PrimaryHDU(data=B_cutout.data, header=B_cutout.wcs.to_header())
-	
+# 				print(6)
 				R_list.append(R_hdu)
 				G_list.append(G_hdu)
 				B_list.append(B_hdu)  
-	
+				print("Image created")
 			if len(R_list)==0:
 				print("something wrong")
 				if len(DES_tiles_to_use)==1:
 					dss= True
 					print("No DES Images found, using DSS2 instead...")
-					R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
-					G_hdu= SkyView.get_images(src_coords,survey=["DSS"],coordinates='J2000',radius=12*u.arcmin)[0]
-					B_hdu= SkyView.get_images(src_coords,survey=["DSS2 Blue"],coordinates='J2000',radius=12*u.arcmin)[0]
-					R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
-					G=np.zeros_like(R)#No G band present in DSS#G_hdu[0].data
-					B=B_hdu[0].data- np.quantile(B_hdu[0].data,0.5)
-					des_wcs=WCS(R_hdu[0].header)
+
 					#continue
-			elif len(R_list)==0:
-				#only one image so no need to mosaic
-				R=R_list[0].data
-				G=G_list[0].data
-				B=B_list[0].data
-				des_wcs=WCS(R_list[0].header)
+			#elif len(R_list)==0:
+				else:
+					print("Optical image obtained")
+					#only one image so no need to mosaic
+					R=R_list[0].data
+					G=G_list[0].data
+					B=B_list[0].data
+					des_wcs=WCS(R_list[0].header)
 			else:
 				#need to combine them
+				print("Combining DES Tiles")
 				des_wcs, shape_out = find_optimal_celestial_wcs(R_list)
 				R, footprint_R = reproject_and_coadd(R_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 				G, footprint_G = reproject_and_coadd(G_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 				B, footprint_B = reproject_and_coadd(B_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
-				
+			
+			if dss:
+				R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
+				G_hdu= SkyView.get_images(src_coords,survey=["DSS"],coordinates='J2000',radius=12*u.arcmin)[0]
+				B_hdu= SkyView.get_images(src_coords,survey=["DSS2 Blue"],coordinates='J2000',radius=12*u.arcmin)[0]
+				R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
+				G=np.zeros_like(R)#No G band present in DSS#G_hdu[0].data
+				B=B_hdu[0].data- np.quantile(B_hdu[0].data,0.5)
+				des_wcs=WCS(R_hdu[0].header)
+				filename = filename.split(settings.field_ref)[0]+"dss_"+filename.split("/")[-1]
+				filename_cross = filename_cross.split(settings.field_ref)[0]+"dss_"+filename_cross.split("/")[-1]
 			img=lupton_rgb.make_lupton_rgb(R,G,B,Q=10,stretch=50,minimum=1)
 			if dss:
 				img = R
