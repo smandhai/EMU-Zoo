@@ -813,6 +813,9 @@ for i in range(0,len(data_sorted)):
 				R, footprint_R = reproject_and_coadd(R_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 				G, footprint_G = reproject_and_coadd(G_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 				B, footprint_B = reproject_and_coadd(B_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
+				if True in np.isnan(R):
+					dss=True
+					print("Optical image is corrupted or incomplete")
 			
 			if dss:
 				try: #Download all the tiles
