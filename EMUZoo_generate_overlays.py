@@ -574,6 +574,7 @@ for i in range(0,len(data_sorted)):
 	if (settings.selavy_convention)&(settings.cat_type!="island"):
 		add_suff = data_sorted[i,src_ind-1][-1]
 	filename = filename.split(".png")[0]+add_suff+filename.split(".png")[-1]+".png"
+	filename_DSS = filename.split(settings.field_ref)[0]+"dss_"+filename.split("/")[-1]
 	filename_cross = filename.split(".png")[0]+'_cross_'+filename.split(".png")[-1]+".png"
 	dir_to_save= settings.radio_output.split(settings.field_ref)[0].split(settings.prefix)[-1].split("/")
 	dir_to_save =list(filter(None,dir_to_save))[0]
@@ -582,7 +583,7 @@ for i in range(0,len(data_sorted)):
 	# aka you shouldn't be able to overwrite existing files unless you tweak this!
 	excluded_source =False #Check if the source should be excluded
 
-	if (os.path.isfile(filename) == False)|overwrite:#|(os.path.isfile(filename) == True): #Second condition is for debugging
+	if (os.path.isfile(filename) == False)&(os.path.isfile(filename_DSS) == False)|overwrite:#|(os.path.isfile(filename) == True): #Second condition is for debugging
 		print(i,SB,src)
 		coords=SkyCoord(ra_deg_cont,dec_deg_cont,frame='fk5',unit=u.degree)   
 
@@ -814,20 +815,28 @@ for i in range(0,len(data_sorted)):
 				B, footprint_B = reproject_and_coadd(B_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 			
 			if dss:
-				R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
-				G_hdu= SkyView.get_images(src_coords,survey=["DSS"],coordinates='J2000',radius=12*u.arcmin)[0]
-				B_hdu= SkyView.get_images(src_coords,survey=["DSS2 Blue"],coordinates='J2000',radius=12*u.arcmin)[0]
-				R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
-				G=np.zeros_like(R)#No G band present in DSS#G_hdu[0].data
-				B=B_hdu[0].data- np.quantile(B_hdu[0].data,0.5)
-				des_wcs=WCS(R_hdu[0].header)
+				try: #Download all the tiles
+					R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
+					G_hdu= SkyView.get_images(src_coords,survey=["DSS"],coordinates='J2000',radius=12*u.arcmin)[0]
+					B_hdu= SkyView.get_images(src_coords,survey=["DSS2 Blue"],coordinates='J2000',radius=12*u.arcmin)[0]
+					G=np.zeros_like(R)#No G band present in DSS#G_hdu[0].data
+					B=B_hdu[0].data- np.quantile(B_hdu[0].data,0.5)
+					R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
+					des_wcs=WCS(R_hdu[0].header)
+				except: #If non-red tiles are unavailable
+					R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
+					R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
+					des_wcs=WCS(R_hdu[0].header)
+				
 				filename = filename.split(settings.field_ref)[0]+"dss_"+filename.split("/")[-1]
 				filename_cross = filename_cross.split(settings.field_ref)[0]+"dss_"+filename_cross.split("/")[-1]
-			img=lupton_rgb.make_lupton_rgb(R,G,B,Q=10,stretch=50,minimum=1)
+			
 			if dss:
 				img = R
+			else:
+				img=lupton_rgb.make_lupton_rgb(R,G,B,Q=10,stretch=50,minimum=1)
 			"Note - SM [27/04/2024]: Some sources have partial images, these need to be flagged up."
-
+			
 			fig = plt.figure(constrained_layout=False,figsize=(1024/my_dpi, 1024/my_dpi),dpi=my_dpi)#*0.55)# <- Uncomment this if you want to downscale the images
 			# Set figure background as white
 			fig.patch.set_facecolor('w')		
