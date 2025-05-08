@@ -813,23 +813,30 @@ for i in range(0,len(data_sorted)):
 				R, footprint_R = reproject_and_coadd(R_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 				G, footprint_G = reproject_and_coadd(G_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
 				B, footprint_B = reproject_and_coadd(B_list,des_wcs,shape_out=shape_out,reproject_function=reproject_interp)
-				if True in np.isnan(R):
+				#If there are more than X% nan values, filter out the DES tiles and use DSS
+				if len(R[np.isnan(R)])>0.2*len(R):
 					dss=True
 					print("Optical image is corrupted or incomplete")
 			
 			if dss:
-				try: #Download all the tiles
-					R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
-					G_hdu= SkyView.get_images(src_coords,survey=["DSS"],coordinates='J2000',radius=12*u.arcmin)[0]
-					B_hdu= SkyView.get_images(src_coords,survey=["DSS2 Blue"],coordinates='J2000',radius=12*u.arcmin)[0]
-					G=np.zeros_like(R)#No G band present in DSS#G_hdu[0].data
-					B=B_hdu[0].data- np.quantile(B_hdu[0].data,0.5)
-					R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
-					des_wcs=WCS(R_hdu[0].header)
-				except: #If non-red tiles are unavailable
-					R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
-					R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
-					des_wcs=WCS(R_hdu[0].header)
+				print("Downloading DSS Alternative")
+				countdown = 5
+				while countdown > 0 : #Keep trying if download fails
+					try: #Download all the tiles
+						R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
+						G_hdu= SkyView.get_images(src_coords,survey=["DSS"],coordinates='J2000',radius=12*u.arcmin)[0]
+						B_hdu= SkyView.get_images(src_coords,survey=["DSS2 Blue"],coordinates='J2000',radius=12*u.arcmin)[0]
+						G=np.zeros_like(R)#No G band present in DSS#G_hdu[0].data
+						B=B_hdu[0].data- np.quantile(B_hdu[0].data,0.5)
+						R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
+						des_wcs=WCS(R_hdu[0].header)
+						break #Leave while loop
+					except: #If non-red tiles are unavailable
+						R_hdu= SkyView.get_images(src_coords,survey=["DSS2 Red"],coordinates='J2000',radius=12*u.arcmin)[0]
+						R=R_hdu[0].data - np.quantile(R_hdu[0].data,0.5)
+						des_wcs=WCS(R_hdu[0].header)
+						break #Leave while loop
+					countdown -= 1
 				
 				filename = filename.split(settings.field_ref)[0]+"dss_"+filename.split("/")[-1]
 				filename_cross = filename_cross.split(settings.field_ref)[0]+"dss_"+filename_cross.split("/")[-1]
@@ -865,9 +872,9 @@ for i in range(0,len(data_sorted)):
 				ax5.imshow(img,transform=ax5.get_transform(des_wcs),origin='lower') 
 				ax6.imshow(img,transform=ax6.get_transform(des_wcs),origin='lower')
 			else:
-				ax4.imshow(img,transform=ax4.get_transform(des_wcs),origin='lower')#,cmap=plt.cm.binary) 
-				ax5.imshow(img,transform=ax5.get_transform(des_wcs),origin='lower')#,cmap=plt.cm.binary) 
-				ax6.imshow(img,transform=ax6.get_transform(des_wcs),origin='lower')#,cmap=plt.cm.binary)
+				ax4.imshow(img,transform=ax4.get_transform(des_wcs),origin='lower',vmin=np.quantile(img,0.1),vmax=np.quantile(img,0.99))#,cmap=plt.cm.binary) 
+				ax5.imshow(img,transform=ax5.get_transform(des_wcs),origin='lower',vmin=np.quantile(img,0.1),vmax=np.quantile(img,0.99))#,cmap=plt.cm.binary) 
+				ax6.imshow(img,transform=ax6.get_transform(des_wcs),origin='lower',vmin=np.quantile(img,0.1),vmax=np.quantile(img,0.99))#,cmap=plt.cm.binary)
 			ax4.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
 			ax5.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
 			ax6.contour(radio_cutout.data,levels=radio_contours,colors=contcolors)
@@ -918,11 +925,15 @@ for i in range(0,len(data_sorted)):
 	
 				#wise_cutout_hdu=fits.PrimaryHDU(data=wise_data, header=wise_wcs.to_header()) 
 				#wise_cutout_hdu.writeto(filename)
-				
-				ax7.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax7.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
-				ax8.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax8.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
-				ax9.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax9.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
-				
+				if download_wise==False:
+					ax7.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax7.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
+					ax8.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax8.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
+					ax9.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax9.get_transform(wise_wcs),origin='lower',cmap=gist_heat)
+				else:
+					ax7.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax7.get_transform(wise_wcs),origin='lower',cmap=gist_heat,vmin=np.quantile(ashinh_scale(wise_data,zeropoint=2,scale=100),0.5),vmax=np.quantile(ashinh_scale(wise_data,zeropoint=2,scale=100),0.99))
+					ax8.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax8.get_transform(wise_wcs),origin='lower',cmap=gist_heat,vmin=np.quantile(ashinh_scale(wise_data,zeropoint=2,scale=100),0.5),vmax=np.quantile(ashinh_scale(wise_data,zeropoint=2,scale=100),0.99))
+					ax9.imshow(ashinh_scale(wise_data,zeropoint=2,scale=100),transform=ax9.get_transform(wise_wcs),origin='lower',cmap=gist_heat,vmin=np.quantile(ashinh_scale(wise_data,zeropoint=2,scale=100),0.5),vmax=np.quantile(ashinh_scale(wise_data,zeropoint=2,scale=100),0.99))					
+					
 			except:
 				print("wise failed")
 				for k in range(0,len(wise_tiles_to_use[0])):
